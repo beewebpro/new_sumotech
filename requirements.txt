@@ -1,0 +1,2 @@
+# Python dependencies for DubSync
+youtube-transcript-api==0.6.1

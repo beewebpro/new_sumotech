@@ -1,0 +1,992 @@
+<?php
+
+namespace App\Services;
+
+use Illuminate\Support\Facades\Storage;
+use Exception;
+use Illuminate\Support\Facades\Log;
+use App\Services\ApiUsageService;
+
+class TTSService
+{
+    // Google Cloud TTS voice mapping for Vietnamese
+    private const GOOGLE_VOICES = [
+        'female' => [
+            'vi-VN-Standard-A' => 'Nữ A (Standard)',
+            'vi-VN-Standard-B' => 'Nữ B (Standard)',
+            'vi-VN-Studio-A' => 'Nữ A (Studio)',
+            'vi-VN-Studio-B' => 'Nữ B (Studio)',
+        ],
+        'male' => [
+            'vi-VN-Standard-C' => 'Nam C (Standard)',
+            'vi-VN-Standard-D' => 'Nam D (Standard)',
+            'vi-VN-Studio-C' => 'Nam C (Studio)',
+            'vi-VN-Studio-D' => 'Nam D (Studio)',
+        ]
+    ];
+
+    // OpenAI TTS voice mapping (via RapidAPI)
+    private const OPENAI_VOICES = [
+        'male' => [
+            'alloy' => 'Nam Alloy (trung, rõ ràng)',
+            'onyx' => 'Nam Onyx (trầm, authoritative)',
+            'echo' => 'Nam Echo (ấm, thân thiện)',
+        ],
+        'female' => [
+            'nova' => 'Nữ Nova (trẻ, tự nhiên)',
+            'shimmer' => 'Nữ Shimmer (mềm, cảm xúc)',
+            'fable' => 'Nữ Fable (kể chuyện chậm)',
+        ],
+    ];
+
+    // Gemini Pro voice mapping (voiceName values from Gemini TTS list)
+    private const GEMINI_VOICES = [
+        'female' => [
+            'Zephyr' => 'Zephyr – Tươi sáng',
+            'Kore' => 'Kore – Firm',
+            'Leda' => 'Leda – Trẻ trung',
+            'Aoede' => 'Aoede – Breezy',
+            'Callirrhoe' => 'Callirrhoe – Dễ chịu',
+            'Autonoe' => 'Autonoe – Sáng',
+            'Despina' => 'Despina – Smooth (Mượt mà)',
+            'Erinome' => 'Erinome – Clear',
+            'Laomedeia' => 'Laomedeia – Rộn ràng',
+            'Achernar' => 'Achernar – Mềm',
+            'Gacrux' => 'Gacrux – Dành cho người lớn',
+            'Vindemiatrix' => 'Vindemiatrix – Êm dịu',
+            'Sulafat' => 'Sulafat – Ấm',
+        ],
+        'male' => [
+            'Puck' => 'Puck – Rộn ràng',
+            'Charon' => 'Charon – Cung cấp nhiều thông tin',
+            'Fenrir' => 'Fenrir – Dễ kích động',
+            'Orus' => 'Orus – Firm',
+            'Enceladus' => 'Enceladus – Breathy',
+            'Iapetus' => 'Iapetus – Rõ ràng',
+            'Umbriel' => 'Umbriel – Dễ tính',
+            'Algieba' => 'Algieba – Lầm mịn',
+            'Algenib' => 'Algenib – Gravelly',
+            'Alnilam' => 'Alnilam – Firm',
+            'Schedar' => 'Schedar – Even',
+            'Zubenelgenubi' => 'Zubenelgenubi – Thông thường',
+            'Sadachbia' => 'Sadachbia – Lively',
+            'Sadaltager' => 'Sadaltager – Hiểu biết',
+        ],
+    ];
+
+    // Microsoft Azure TTS voices (Vietnamese - via edge-tts)
+    private const MICROSOFT_VOICES = [
+        'female' => [
+            'vi-VN-HoaiMyNeural' => 'Hoài My (Neural) – Tự nhiên',
+            'vi-VN-NamMinhNeural' => 'Nam Minh Nữ (Neural)',
+        ],
+        'male' => [
+            'vi-VN-NamMinhNeural' => 'Nam Minh (Neural) – Tự nhiên',
+        ],
+    ];
+
+    // Vbee TTS voices (Vietnamese)
+    private const VBEE_VOICES = [
+        'female' => [
+            'hn_female_ngochuyen_full_48k-fhg' => 'HN – Ngọc Huyền (48k)',
+            'hn_female_maiphuong_vdts_48k-fhg' => 'HN – Mai Phương (48k)',
+            'sg_female_lantrinh_vdts_48k-fhg' => 'SG – Lan Trinh (48k)',
+            'hue_female_huonggiang_full_48k-fhg' => 'Huế – Hương Giang (48k)',
+            'sg_female_thaotrinh_full_48k-fhg' => 'SG – Thảo Trinh (48k)',
+            'sg_female_tuongvy_call_44k-fhg' => 'SG – Tường Vy (44k)',
+            'sg_female_thaotrinh_full_44k-phg' => 'SG – Thảo Trinh (44k)',
+            'hn_female_hermer_stor_48k-fhg' => 'HN – Ngọc Lan (48k, kể chuyện)',
+            'hn_female_lenka_stor_48k-phg' => 'HN – Nguyệt Dương (48k, kể chuyện)',
+            'hn_female_hachi_book_22k-vc' => 'HN – Hà Chi (22k, sách)',
+        ],
+        'male' => [
+            'sg_male_trungkien_vdts_48k-fhg' => 'SG – Trung Kiên (48k)',
+            'hue_male_duyphuong_full_48k-fhg' => 'Huế – Duy Phương (48k)',
+            'sg_male_minhhoang_full_48k-fhg' => 'SG – Minh Hoàng (48k)',
+            'hn_male_manhdung_news_48k-fhg' => 'HN – Mạnh Dũng (48k, tin tức)',
+            'hn_male_thanhlong_talk_48k-fhg' => 'HN – Thanh Long (48k, nói chuyện)',
+            'hn_male_phuthang_news65dt_44k-fhg' => 'HN – Anh Khôi (44k, tin tức)',
+            'hn_male_manhdung_news_48k-phg' => 'HN – Mạnh Dũng (48k, phg)',
+            'hn_male_phuthang_stor80dt_48k-fhg' => 'HN – Anh Khôi (48k, kể chuyện)',
+            'sg_male_chidat_ebook_48k-phg' => 'SG – Chí Đạt (48k, ebook)',
+            'hn_male_vietbach_child_22k-vc' => 'HN – Việt Bách (22k, trẻ em)',
+        ],
+    ];
+
+    /**
+     * Get available voices for gender
+     */
+    public static function getAvailableVoices(string $gender = 'female', string $provider = 'google'): array
+    {
+        $gender = strtolower($gender);
+        $provider = strtolower($provider);
+
+        if ($provider === 'openai') {
+            return $gender === 'male' ? self::OPENAI_VOICES['male'] : self::OPENAI_VOICES['female'];
+        }
+
+        if ($provider === 'gemini') {
+            return $gender === 'male' ? self::GEMINI_VOICES['male'] : self::GEMINI_VOICES['female'];
+        }
+
+        if ($provider === 'microsoft') {
+            return $gender === 'male' ? self::MICROSOFT_VOICES['male'] : self::MICROSOFT_VOICES['female'];
+        }
+
+        if ($provider === 'vbee') {
+            return $gender === 'male' ? self::VBEE_VOICES['male'] : self::VBEE_VOICES['female'];
+        }
+
+        return $gender === 'male' ? self::GOOGLE_VOICES['male'] : self::GOOGLE_VOICES['female'];
+    }
+
+    /**
+     * Get all available voices
+     */
+    public static function getAllVoices(string $provider = 'google'): array
+    {
+        $provider = strtolower($provider);
+
+        if ($provider === 'openai') {
+            return [
+                'female' => self::OPENAI_VOICES['female'],
+                'male' => self::OPENAI_VOICES['male'],
+            ];
+        }
+
+        if ($provider === 'gemini') {
+            return [
+                'female' => self::GEMINI_VOICES['female'],
+                'male' => self::GEMINI_VOICES['male'],
+            ];
+        }
+
+        if ($provider === 'microsoft') {
+            return [
+                'female' => self::MICROSOFT_VOICES['female'],
+                'male' => self::MICROSOFT_VOICES['male'],
+            ];
+        }
+
+        if ($provider === 'vbee') {
+            return [
+                'female' => self::VBEE_VOICES['female'],
+                'male' => self::VBEE_VOICES['male'],
+            ];
+        }
+
+        return [
+            'female' => self::GOOGLE_VOICES['female'],
+            'male' => self::GOOGLE_VOICES['male'],
+        ];
+    }
+
+    /**
+     * Get audio duration in seconds using ffprobe
+     */
+    public function getAudioDuration(string $audioPath): float
+    {
+        try {
+            $fullPath = Storage::path($audioPath);
+
+            if (!file_exists($fullPath)) {
+                throw new Exception("Audio file not found: {$audioPath}");
+            }
+
+            // Use ffprobe to get duration
+            $command = "ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{$fullPath}\" 2>&1";
+
+            exec($command, $output, $returnCode);
+
+            if ($returnCode === 0 && isset($output[0]) && is_numeric($output[0])) {
+                return (float) $output[0];
+            }
+
+            Log::warning('Failed to get audio duration via ffprobe', [
+                'path' => $audioPath,
+                'return_code' => $returnCode,
+                'output' => $output
+            ]);
+
+            // Fallback: estimate based on file size (very rough)
+            // Assume average bitrate of 128kbps for MP3/WAV
+            $fileSize = filesize($fullPath);
+            $estimatedDuration = $fileSize / (128 * 1024 / 8); // bytes / (bitrate in bytes/sec)
+
+            return $estimatedDuration;
+        } catch (Exception $e) {
+            Log::error('Get audio duration error', [
+                'error' => $e->getMessage(),
+                'path' => $audioPath
+            ]);
+            return 1.0; // Default fallback
+        }
+    }
+
+
+    /**
+     * Generate audio from text using TTS
+     * 
+     * @param string $text
+     * @param int $index
+     * @param string $voiceGender
+     * @param string|null $voiceName
+     * @param string $styleInstruction Optional style instruction for TTS
+     * @return string Path to generated audio file
+     */
+    public function generateAudio(
+        string $text,
+        int $index,
+        string $voiceGender = 'female',
+        ?string $voiceName = null,
+        string $provider = 'google',
+        ?string $styleInstruction = null,
+        ?int $projectId = null
+    ): string {
+        try {
+            $provider = strtolower($provider);
+
+            // Prepend style instruction to text for Gemini TTS (and other providers if needed)
+            $finalText = $text;
+            if (!empty($styleInstruction) && !str_contains($text, $styleInstruction)) {
+                $finalText = $styleInstruction . "\n\n" . $text;
+            }
+
+            Log::info('TTS Generation', [
+                'index' => $index,
+                'provider' => $provider,
+                'voice_gender' => $voiceGender,
+                'voice_name' => $voiceName,
+                'text_length' => strlen($finalText),
+                'has_style_instruction' => !empty($styleInstruction)
+            ]);
+
+            if ($provider === 'openai') {
+                // Use OpenAI API directly
+                $apiKey = env('OPENAI_API_KEY');
+
+                if ($apiKey) {
+                    return $this->generateWithOpenAIDirectTTS($finalText, $index, $voiceGender, $voiceName, $apiKey, $projectId);
+                }
+
+                throw new Exception('Missing OPENAI_API_KEY for OpenAI TTS. Please set OPENAI_API_KEY in .env');
+            } elseif ($provider === 'gemini') {
+                $geminiApiKey = env('GEMINI_API_KEY', env('GEMINI_TTS_API_KEY'));
+
+                if (!$geminiApiKey) {
+                    throw new Exception('Missing GEMINI_API_KEY for Gemini TTS');
+                }
+
+                return $this->generateWithGeminiTTS($finalText, $index, $voiceGender, $voiceName, $geminiApiKey, $projectId);
+            } elseif ($provider === 'microsoft') {
+                // Use local edge-tts (no API key needed)
+                return $this->generateWithEdgeTTS($finalText, $index, $voiceGender, $voiceName, $projectId);
+            } elseif ($provider === 'vbee') {
+                $vbeeAppId = env('VBEE_TTS_APP_ID');
+                $vbeeToken = env('VBEE_TTS_TOKEN');
+
+                if (!$vbeeAppId || !$vbeeToken) {
+                    throw new Exception('Missing VBEE_TTS_APP_ID or VBEE_TTS_TOKEN. Please set both in .env');
+                }
+
+                return $this->generateWithVbeeTTS($text, $index, $voiceGender, $voiceName, $vbeeAppId, $vbeeToken, $projectId);
+            } else {
+                $apiKey = env('GOOGLE_TTS_API_KEY');
+                if ($apiKey) {
+                    return $this->generateWithGoogleTTS($finalText, $index, $voiceGender, $voiceName, $apiKey, $projectId);
+                }
+            }
+
+            // No valid provider configured - throw error instead of mock
+            throw new Exception("No valid TTS provider configured. Please set up API keys for: openai, gemini, or microsoft");
+        } catch (Exception $e) {
+            Log::error('TTS Generation Error', ['error' => $e->getMessage()]);
+            // Always throw error - never fallback to mock audio in production
+            // This prevents silent failures that create corrupt audio files
+            throw $e;
+        }
+    }
+
+    /**
+     * Generate audio using Google Cloud TTS
+     */
+    private function generateWithGoogleTTS(string $text, int $index, string $voiceGender, ?string $voiceName, string $apiKey, ?int $projectId = null): string
+    {
+        $url = "https://texttospeech.googleapis.com/v1/text:synthesize?key=" . $apiKey;
+
+        // Use provided voice name or get default
+        $voiceGender = strtolower($voiceGender);
+        $selectedVoice = $voiceName;
+
+        if (!$selectedVoice) {
+            // Get first available voice for gender
+            $voices = self::getAvailableVoices($voiceGender, 'google');
+            $selectedVoice = array_key_first($voices) ?? 'vi-VN-Standard-A';
+        }
+
+        $ssmlGender = $voiceGender === 'male' ? 'MALE' : 'FEMALE';
+
+        $data = [
+            'input' => ['text' => $text],
+            'voice' => [
+                'languageCode' => 'vi-VN',
+                'name' => $selectedVoice,
+                'ssmlGender' => $ssmlGender
+            ],
+            'audioConfig' => [
+                'audioEncoding' => 'MP3',
+                'speakingRate' => 1.0,
+                'pitch' => 0.0
+            ]
+        ];
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $result = json_decode($response, true);
+
+        if ($httpCode === 200 && isset($result['audioContent'])) {
+            $audioData = base64_decode($result['audioContent']);
+            $folder = $projectId ? "public/projects/{$projectId}" : "public/dubsync/tts";
+            $filename = "{$folder}/s{$index}_" . time() . ".mp3";
+            Storage::put($filename, $audioData);
+            Log::info('TTS Generated Successfully', ['file' => $filename]);
+
+            // Log API usage
+            ApiUsageService::logTTS(
+                'Google Cloud TTS',
+                'generate_audio',
+                strlen($text),
+                null,
+                $projectId,
+                ['voice' => $selectedVoice ?? 'default']
+            );
+
+            return $filename;
+        }
+
+        Log::error('Google TTS Error', ['http_code' => $httpCode, 'response' => $response]);
+
+        // Log failure
+        ApiUsageService::logFailure(
+            'Google Cloud TTS',
+            'generate_audio',
+            'HTTP ' . $httpCode . ': ' . substr($response, 0, 200),
+            $projectId,
+            ['text_length' => strlen($text)]
+        );
+
+        throw new Exception('Failed to generate TTS audio');
+    }
+
+    /**
+     * Generate audio using OpenAI TTS (RapidAPI)
+     */
+    private function generateWithOpenAITTS(
+        string $text,
+        int $index,
+        string $voiceGender,
+        ?string $voiceName,
+        string $apiKey,
+        string $apiHost,
+        ?int $projectId = null
+    ): string {
+        $selectedVoice = $this->resolveOpenAIVoice($voiceGender, $voiceName);
+        $url = "https://{$apiHost}/";
+
+        $payload = [
+            'model' => 'tts-1-hd',
+            'input' => $text,
+            'voice' => $selectedVoice
+        ];
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            "x-rapidapi-host: {$apiHost}",
+            "x-rapidapi-key: {$apiKey}"
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($httpCode !== 200 || !$response) {
+            Log::error('OpenAI TTS Error', [
+                'http_code' => $httpCode,
+                'content_type' => $contentType,
+                'curl_error' => $curlError,
+                'response_preview' => is_string($response) ? substr($response, 0, 500) : null
+            ]);
+
+            // Log failure
+            ApiUsageService::logFailure(
+                'OpenAI TTS',
+                'generate_audio',
+                'HTTP ' . $httpCode . ': ' . ($curlError ? $curlError : substr($response, 0, 200)),
+                $projectId,
+                ['text_length' => strlen($text)]
+            );
+
+            throw new Exception('Failed to generate OpenAI TTS audio');
+        }
+
+        $audioData = null;
+
+        if ($contentType && stripos($contentType, 'application/json') !== false) {
+            $decoded = json_decode($response, true);
+            if (is_array($decoded)) {
+                if (!empty($decoded['audioContent'])) {
+                    $audioData = base64_decode($decoded['audioContent']);
+                } elseif (!empty($decoded['audio'])) {
+                    $audioData = base64_decode($decoded['audio']);
+                } elseif (!empty($decoded['data'])) {
+                    $audioData = base64_decode($decoded['data']);
+                }
+            }
+        }
+
+        if (!$audioData) {
+            $audioData = $response;
+        }
+
+        $folder = $projectId ? "public/projects/{$projectId}" : "public/dubsync/tts";
+        $filename = "{$folder}/s{$index}_" . time() . "_openai.mp3";
+        Storage::put($filename, $audioData);
+        Log::info('OpenAI TTS Generated Successfully', ['file' => $filename, 'voice' => $selectedVoice]);
+
+        // Log API usage
+        ApiUsageService::logTTS(
+            'OpenAI TTS',
+            'generate_audio',
+            strlen($text),
+            null,
+            $projectId,
+            ['voice' => $selectedVoice]
+        );
+
+        return $filename;
+    }
+
+    /**
+     * Generate audio using OpenAI TTS Direct API (not RapidAPI)
+     * Uses official OpenAI API endpoint: https://api.openai.com/v1/audio/speech
+     */
+    private function generateWithOpenAIDirectTTS(
+        string $text,
+        int $index,
+        string $voiceGender,
+        ?string $voiceName,
+        string $apiKey,
+        ?int $projectId = null
+    ): string {
+        $selectedVoice = $this->resolveOpenAIVoice($voiceGender, $voiceName);
+        $url = "https://api.openai.com/v1/audio/speech";
+
+        $payload = [
+            'model' => 'tts-1-hd',
+            'input' => $text,
+            'voice' => $selectedVoice,
+            'response_format' => 'mp3'
+        ];
+
+        Log::info('OpenAI Direct TTS Request', [
+            'voice' => $selectedVoice,
+            'text_length' => strlen($text),
+            'model' => 'tts-1-hd'
+        ]);
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 120);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            "Authorization: Bearer {$apiKey}"
+        ]);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($httpCode !== 200 || !$response) {
+            $errorMessage = $curlError ?: substr($response, 0, 500);
+
+            // Try to parse JSON error response
+            if ($response && stripos($contentType, 'application/json') !== false) {
+                $decoded = json_decode($response, true);
+                if (isset($decoded['error']['message'])) {
+                    $errorMessage = $decoded['error']['message'];
+                }
+            }
+
+            Log::error('OpenAI Direct TTS Error', [
+                'http_code' => $httpCode,
+                'content_type' => $contentType,
+                'curl_error' => $curlError,
+                'error_message' => $errorMessage
+            ]);
+
+            // Log failure
+            ApiUsageService::logFailure(
+                'OpenAI Direct TTS',
+                'generate_audio',
+                'HTTP ' . $httpCode . ': ' . $errorMessage,
+                $projectId,
+                ['text_length' => strlen($text)]
+            );
+
+            throw new Exception('OpenAI TTS Error: ' . $errorMessage);
+        }
+
+        // OpenAI returns raw audio data directly (not base64 encoded)
+        $audioData = $response;
+
+        $folder = $projectId ? "public/projects/{$projectId}" : "public/dubsync/tts";
+        $filename = "{$folder}/s{$index}_" . time() . "_openai_direct.mp3";
+        Storage::put($filename, $audioData);
+
+        Log::info('OpenAI Direct TTS Generated Successfully', [
+            'file' => $filename,
+            'voice' => $selectedVoice,
+            'size' => strlen($audioData)
+        ]);
+
+        // Log API usage
+        ApiUsageService::logTTS(
+            'OpenAI Direct TTS',
+            'generate_audio',
+            strlen($text),
+            null,
+            $projectId,
+            ['voice' => $selectedVoice, 'model' => 'tts-1-hd']
+        );
+
+        return $filename;
+    }
+
+    /**
+     * Generate audio using Microsoft Azure TTS
+     */
+    private function generateWithMicrosoftTTS(
+        string $text,
+        int $index,
+        string $voiceGender,
+        ?string $voiceName,
+        string $azureKey,
+        string $region = 'southeastasia',
+        ?int $projectId = null
+    ): string {
+        // Use local edge-tts Python script instead of Azure API
+        return $this->generateWithEdgeTTS($text, $index, $voiceGender, $voiceName, $projectId);
+    }
+
+    /**
+     * Generate audio using Edge TTS (local Python script)
+     */
+    private function generateWithEdgeTTS(
+        string $text,
+        int $index,
+        string $voiceGender,
+        ?string $voiceName,
+        ?int $projectId = null
+    ): string {
+        // Resolve voice name
+        $selectedVoice = $voiceName;
+        if (!$selectedVoice) {
+            $voices = self::getAvailableVoices($voiceGender, 'microsoft');
+            $selectedVoice = array_key_first($voices) ?? 'vi-VN-HoaiMyNeural';
+        }
+
+        // Prepare output directory
+        $directory = 'public/dubsync/tts_audio';
+        if (!Storage::exists($directory)) {
+            Storage::makeDirectory($directory);
+        }
+
+        $filename = $directory . '/edge_' . $index . '_' . time() . '_' . uniqid() . '.mp3';
+        $outputPath = Storage::path($filename);
+
+        // Path to Python script
+        $scriptPath = storage_path('scripts/edge_tts_generate.py');
+        $pythonPath = base_path('.venv/Scripts/python.exe');
+
+        // Escape text for command line
+        $escapedText = str_replace(['"', "\n", "\r"], ['\\"', ' ', ' '], $text);
+
+        // Build command
+        $command = "\"{$pythonPath}\" \"{$scriptPath}\" --text \"{$escapedText}\" --out \"{$outputPath}\" --voice \"{$selectedVoice}\" 2>&1";
+
+        Log::info('Edge TTS Command', [
+            'voice' => $selectedVoice,
+            'text_length' => strlen($text),
+            'output' => $outputPath
+        ]);
+
+        exec($command, $output, $returnCode);
+
+        if ($returnCode !== 0 || !file_exists($outputPath)) {
+            Log::error('Edge TTS Error', [
+                'return_code' => $returnCode,
+                'output' => $output,
+                'command' => $command
+            ]);
+            throw new Exception('Edge TTS failed: ' . implode("\n", $output));
+        }
+
+        // Track API usage (edge-tts is free, but log for statistics)
+        try {
+            ApiUsageService::log([
+                'api_type' => 'Edge TTS',
+                'api_endpoint' => 'local',
+                'purpose' => 'TTS Generation',
+                'tokens_used' => strlen($text),
+                'estimated_cost' => 0,
+                'project_id' => $projectId,
+                'description' => "Voice: {$selectedVoice}",
+            ]);
+        } catch (\Exception $e) {
+            // Ignore usage tracking errors
+        }
+
+        return $filename;
+    }
+
+    /**
+     * Generate audio using Gemini Pro TTS (Google Cloud with regional endpoint)
+     */
+    private function generateWithGeminiTTS(
+        string $text,
+        int $index,
+        string $voiceGender,
+        ?string $voiceName,
+        string $apiKey,
+        ?int $projectId = null
+    ): string {
+        $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={$apiKey}";
+
+        $selectedVoice = $this->resolveGeminiVoice($voiceGender, $voiceName);
+
+        $data = [
+            'contents' => [
+                [
+                    'role' => 'user',
+                    'parts' => [
+                        ['text' => $text]
+                    ]
+                ]
+            ],
+            'generationConfig' => [
+                'responseModalities' => ['AUDIO'],
+                'speechConfig' => [
+                    'multiSpeakerVoiceConfig' => [
+                        'speakerVoiceConfigs' => [
+                            [
+                                'speaker' => 'Speaker 1',
+                                'voiceConfig' => [
+                                    'prebuiltVoiceConfig' => [
+                                        'voiceName' => $selectedVoice
+                                    ]
+                                ]
+                            ],
+                            [
+                                'speaker' => 'Speaker 2',
+                                'voiceConfig' => [
+                                    'prebuiltVoiceConfig' => [
+                                        'voiceName' => $selectedVoice
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ];
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $endpoint);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        $result = json_decode($response, true);
+
+        if ($httpCode === 200 && isset($result['candidates'][0]['content']['parts'][0]['inlineData']['data'])) {
+            $inlineData = $result['candidates'][0]['content']['parts'][0]['inlineData'];
+            $audioData = base64_decode($inlineData['data']);
+            $mimeType = $inlineData['mimeType'] ?? 'application/octet-stream';
+
+            $ext = 'mp3';
+            if (str_contains($mimeType, 'wav') || str_contains($mimeType, 'x-wav')) {
+                $ext = 'wav';
+            } elseif (str_contains($mimeType, 'mpeg') || str_contains($mimeType, 'mp3')) {
+                $ext = 'mp3';
+            } elseif (str_contains($mimeType, 'pcm') || str_contains($mimeType, 'l16') || str_contains($mimeType, 'raw')) {
+                // Convert raw PCM to WAV for browser playback
+                $sampleRate = 24000;
+                $channels = 1;
+                if (preg_match('/rate=(\d+)/', $mimeType, $match)) {
+                    $sampleRate = (int) $match[1];
+                }
+                if (preg_match('/channels=(\d+)/', $mimeType, $match)) {
+                    $channels = (int) $match[1];
+                }
+                $audioData = $this->wrapPcmToWav($audioData, $sampleRate, $channels, 16);
+                $ext = 'wav';
+            }
+
+            $folder = $projectId ? "public/projects/{$projectId}" : "public/dubsync/tts";
+            $filename = "{$folder}/s{$index}_" . time() . "_gemini.{$ext}";
+            Storage::put($filename, $audioData);
+            Log::info('Gemini TTS Generated Successfully', [
+                'file' => $filename,
+                'voice' => $selectedVoice,
+                'mimeType' => $mimeType
+            ]);
+            return $filename;
+        }
+
+        Log::error('Gemini TTS Error', [
+            'http_code' => $httpCode,
+            'response' => $response,
+            'voice' => $selectedVoice
+        ]);
+        $errorMessage = 'Failed to generate Gemini TTS audio';
+        if (is_array($result) && isset($result['error']['message'])) {
+            $errorMessage .= ': ' . $result['error']['message'];
+        } elseif (is_string($response) && $response !== '') {
+            $errorMessage .= ': ' . $response;
+        }
+        throw new Exception($errorMessage);
+    }
+
+    /**
+     * Generate mock audio file for development
+     */
+    private function generateMockAudio(string $text, int $index, string $voiceGender, ?string $voiceName, string $provider, ?int $projectId = null): string
+    {
+        // Create a placeholder audio file
+        $folder = $projectId ? "public/projects/{$projectId}" : "public/dubsync/tts";
+        $filename = "{$folder}/s{$index}_" . time() . ".mp3";
+
+        // Create directory if it doesn't exist
+        $directory = dirname(storage_path('app/' . $filename));
+        if (!is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        // Create a small placeholder file with voice info
+        $voiceInfo = $voiceName ? " [{$voiceName}]" : " [{$voiceGender}]";
+        $voiceInfo .= " [{$provider}]";
+        $placeholderContent = "Mock audio for: " . substr($text, 0, 50) . $voiceInfo;
+        Storage::put($filename, $placeholderContent);
+
+        Log::info('Mock TTS Generated', [
+            'file' => $filename,
+            'voice' => $voiceName ?? $voiceGender,
+            'provider' => $provider
+        ]);
+
+        return $filename;
+    }
+
+    private function resolveOpenAIVoice(string $voiceGender, ?string $voiceName): string
+    {
+        $voiceGender = strtolower($voiceGender);
+        $voices = $voiceGender === 'male' ? self::OPENAI_VOICES['male'] : self::OPENAI_VOICES['female'];
+
+        if ($voiceName && array_key_exists($voiceName, $voices)) {
+            return $voiceName;
+        }
+
+        return array_key_first($voices) ?? 'alloy';
+    }
+
+    private function resolveGeminiVoice(string $voiceGender, ?string $voiceName): string
+    {
+        $voiceGender = strtolower($voiceGender);
+        $voices = $voiceGender === 'male' ? self::GEMINI_VOICES['male'] : self::GEMINI_VOICES['female'];
+
+        if ($voiceName && array_key_exists($voiceName, $voices)) {
+            return $voiceName;
+        }
+
+        return array_key_first($voices) ?? 'Kore';
+    }
+
+    /**
+     * Resolve Vbee voice code
+     */
+    private function resolveVbeeVoice(string $voiceGender, ?string $voiceName): string
+    {
+        $voiceGender = strtolower($voiceGender);
+        $voices = $voiceGender === 'male' ? self::VBEE_VOICES['male'] : self::VBEE_VOICES['female'];
+
+        if ($voiceName && array_key_exists($voiceName, $voices)) {
+            return $voiceName;
+        }
+
+        return array_key_first($voices) ?? 'hn_female_ngochuyen_full_48k-fhg';
+    }
+
+    /**
+     * Generate audio using Vbee TTS API (async → poll → download)
+     */
+    private function generateWithVbeeTTS(
+        string $text,
+        int $index,
+        string $voiceGender,
+        ?string $voiceName,
+        string $appId,
+        string $token,
+        ?int $projectId = null
+    ): string {
+        $voiceCode = $this->resolveVbeeVoice($voiceGender, $voiceName);
+
+        Log::info('Vbee TTS: Starting', [
+            'voice_code' => $voiceCode,
+            'text_length' => mb_strlen($text),
+            'index' => $index,
+        ]);
+
+        // Step 1: Submit TTS request
+        $client = new \GuzzleHttp\Client();
+        $callbackUrl = rtrim(env('APP_URL', 'http://localhost'), '/') . '/api/vbee-callback';
+
+        $response = $client->post('https://vbee.vn/api/v1/tts', [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token,
+                'Content-Type'  => 'application/json',
+            ],
+            'json' => [
+                'app_id'        => $appId,
+                'response_type' => 'indirect',
+                'callback_url'  => $callbackUrl,
+                'input_text'    => $text,
+                'voice_code'    => $voiceCode,
+                'audio_type'    => 'mp3',
+                'bitrate'       => 128,
+                'speed_rate'    => '1.0',
+            ],
+            'timeout' => 30,
+        ]);
+
+        $body = json_decode($response->getBody()->getContents(), true);
+
+        if (($body['status'] ?? 0) !== 1) {
+            $errMsg = $body['error_message'] ?? 'Vbee API returned error';
+            throw new Exception('Vbee TTS submit failed: ' . $errMsg);
+        }
+
+        $requestId = $body['result']['request_id'] ?? null;
+        if (!$requestId) {
+            throw new Exception('Vbee TTS: No request_id returned');
+        }
+
+        Log::info('Vbee TTS: Request submitted', ['request_id' => $requestId]);
+
+        // Step 2: Poll for completion (max ~3 minutes)
+        $audioLink = null;
+        $maxAttempts = 60; // 60 × 3s = 180s
+        for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
+            sleep(3);
+
+            $pollResp = $client->get("https://vbee.vn/api/v1/tts/{$requestId}", [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $token,
+                ],
+                'timeout' => 15,
+            ]);
+
+            $pollBody = json_decode($pollResp->getBody()->getContents(), true);
+            $status = $pollBody['result']['status'] ?? '';
+
+            if ($status === 'SUCCESS') {
+                $audioLink = $pollBody['result']['audio_link'] ?? null;
+                break;
+            } elseif ($status === 'FAILURE') {
+                throw new Exception('Vbee TTS failed for request ' . $requestId);
+            }
+
+            // IN_PROGRESS — keep polling
+            Log::debug('Vbee TTS: Polling', ['attempt' => $attempt + 1, 'status' => $status]);
+        }
+
+        if (!$audioLink) {
+            throw new Exception('Vbee TTS: Timeout waiting for audio (request ' . $requestId . ')');
+        }
+
+        Log::info('Vbee TTS: Audio ready', ['audio_link' => $audioLink]);
+
+        // Step 3: Download the audio file (link expires after 3 minutes)
+        $audioData = $client->get($audioLink, ['timeout' => 30])->getBody()->getContents();
+
+        // Save using Storage facade (relative path) — consistent with other providers
+        $folder = $projectId ? "public/projects/{$projectId}" : "public/dubsync/tts";
+        $filename = "{$folder}/s{$index}_" . time() . "_vbee.mp3";
+        Storage::put($filename, $audioData);
+
+        Log::info('Vbee TTS: Saved audio', ['file' => $filename, 'size' => strlen($audioData)]);
+
+        // Track API usage
+        if ($projectId) {
+            try {
+                ApiUsageService::trackUsage($projectId, 'vbee', 'tts', [
+                    'characters' => mb_strlen($text),
+                    'voice_code' => $voiceCode,
+                    'request_id' => $requestId,
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('Vbee TTS: Failed to track usage', ['error' => $e->getMessage()]);
+            }
+        }
+
+        return $filename;
+    }
+
+    private function wrapPcmToWav(string $pcmData, int $sampleRate, int $channels, int $bitsPerSample): string
+    {
+        $dataSize = strlen($pcmData);
+        $byteRate = $sampleRate * $channels * ($bitsPerSample / 8);
+        $blockAlign = $channels * ($bitsPerSample / 8);
+
+        $header = "RIFF";
+        $header .= pack('V', 36 + $dataSize);
+        $header .= "WAVE";
+        $header .= "fmt ";
+        $header .= pack('V', 16);
+        $header .= pack('v', 1); // PCM format
+        $header .= pack('v', $channels);
+        $header .= pack('V', $sampleRate);
+        $header .= pack('V', (int) $byteRate);
+        $header .= pack('v', (int) $blockAlign);
+        $header .= pack('v', $bitsPerSample);
+        $header .= "data";
+        $header .= pack('V', $dataSize);
+
+        return $header . $pcmData;
+    }
+}
