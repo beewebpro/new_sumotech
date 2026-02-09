@@ -15,7 +15,9 @@ use App\Services\DIDLipsyncService;
 use App\Services\LipsyncSegmentManager;
 use App\Services\VideoCompositionService;
 use App\Services\DescriptionVideoService;
+use App\Jobs\GenerateDescriptionVideoJob;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -840,8 +842,18 @@ class AudioBookController extends Controller
     public function generateDescriptionVideo(Request $request, AudioBook $audioBook)
     {
         try {
+            $this->updateDescriptionVideoProgress($audioBook->id, [
+                'status' => 'processing',
+                'percent' => 5,
+                'message' => 'Đang khởi tạo...'
+            ]);
             // Validate: need description audio
             if (!$audioBook->description_audio) {
+                $this->updateDescriptionVideoProgress($audioBook->id, [
+                    'status' => 'error',
+                    'percent' => 0,
+                    'message' => 'Chưa có audio giới thiệu.'
+                ]);
                 return response()->json([
                     'success' => false,
                     'error' => 'Chưa có audio giới thiệu. Vui lòng tạo audio trước.'
@@ -850,6 +862,11 @@ class AudioBookController extends Controller
 
             // Validate: need intro music
             if (!$audioBook->intro_music) {
+                $this->updateDescriptionVideoProgress($audioBook->id, [
+                    'status' => 'error',
+                    'percent' => 0,
+                    'message' => 'Chưa có nhạc Intro.'
+                ]);
                 return response()->json([
                     'success' => false,
                     'error' => 'Chưa có nhạc Intro. Vui lòng upload nhạc Intro trước.'
@@ -858,6 +875,11 @@ class AudioBookController extends Controller
 
             // Validate: need wave settings
             if (!$audioBook->wave_enabled) {
+                $this->updateDescriptionVideoProgress($audioBook->id, [
+                    'status' => 'error',
+                    'percent' => 0,
+                    'message' => 'Chưa bật hiệu ứng sóng âm.'
+                ]);
                 return response()->json([
                     'success' => false,
                     'error' => 'Chưa bật hiệu ứng sóng âm. Vui lòng bật và cấu hình trước.'
@@ -875,6 +897,11 @@ class AudioBookController extends Controller
             // Build absolute paths
             $imagePath = storage_path('app/public/books/' . $audioBook->id . '/' . $imageType . '/' . $imageFilename);
             if (!file_exists($imagePath)) {
+                $this->updateDescriptionVideoProgress($audioBook->id, [
+                    'status' => 'error',
+                    'percent' => 0,
+                    'message' => 'File ảnh không tồn tại.'
+                ]);
                 return response()->json([
                     'success' => false,
                     'error' => 'File ảnh không tồn tại: ' . $imageFilename
@@ -883,6 +910,11 @@ class AudioBookController extends Controller
 
             $voicePath = storage_path('app/public/' . $audioBook->description_audio);
             if (!file_exists($voicePath)) {
+                $this->updateDescriptionVideoProgress($audioBook->id, [
+                    'status' => 'error',
+                    'percent' => 0,
+                    'message' => 'File audio giới thiệu không tồn tại.'
+                ]);
                 return response()->json([
                     'success' => false,
                     'error' => 'File audio giới thiệu không tồn tại.'
@@ -891,6 +923,11 @@ class AudioBookController extends Controller
 
             $introMusicPath = storage_path('app/public/' . $audioBook->intro_music);
             if (!file_exists($introMusicPath)) {
+                $this->updateDescriptionVideoProgress($audioBook->id, [
+                    'status' => 'error',
+                    'percent' => 0,
+                    'message' => 'File nhạc Intro không tồn tại.'
+                ]);
                 return response()->json([
                     'success' => false,
                     'error' => 'File nhạc Intro không tồn tại.'
@@ -972,59 +1009,68 @@ class AudioBookController extends Controller
             // ============================
             // Timeline:
             //   0 ──── intro_fade ──── (intro_fade + voice_duration) ──── total_duration
-            //   |  music full vol  |  music low (0.15) + voice        |  music fade up → fade out  |
+            //   |  intro music   |            voice only              |   outro music   |
             //
             // Music track: loops the intro music for the full duration
-            //   - Starts at volume 1.0
-            //   - At intro_fade seconds: fade down to 0.15 over 2s
-            //   - At (intro_fade + voice_duration - 1): fade back up to 0.8 over 2s
-            //   - At (total_duration - outro_fade): fade out to 0 over outro_fade seconds
+            //   - Plays only during intro and outro windows
+            //   - Fades out at the end of intro and end of outro
             //
             // Voice track: delayed by intro_fade seconds
 
-            $voiceStartTime = $introFadeDuration; // voice starts after intro music fade
+            $voiceStartTime = $introFadeDuration; // voice starts after intro music window
             $voiceEndTime = $voiceStartTime + $voiceDuration;
 
-            // Time points for volume envelope (must be in ascending order for nested if())
-            // t1: start fading music down (1s before voice starts)
-            // t2: end of fade down (t1 + 2s)
-            // t3: voice ends, start fading music back up
-            // t4: end of fade up (t3 + 2s, capped at totalDuration)
-            // t5: total duration (music fades from 0.8 to 0 between t4 and t5)
-            $t1 = max(0, $voiceStartTime - 1);
-            $t2 = $t1 + 2;
-            $t3 = $voiceEndTime;
-            $t4 = min($t3 + 2, $totalDuration);
-            $t5 = $totalDuration;
-            $fadeOutTime = max(0.1, $t5 - $t4); // time for final fade out
+            $introFadeOutDuration = min(1.5, max(0.2, $introFadeDuration * 0.5));
+            $introFadeOutStart = max(0, $voiceStartTime - $introFadeOutDuration);
+
+            $outroDuration = max(0, $outroExtendDuration);
+            $outroFadeOutDuration = $outroDuration > 0
+                ? min($outroFadeDuration, max(0.2, $outroDuration))
+                : 0;
+            $outroFadeOutStart = $voiceEndTime + max(0, $outroDuration - $outroFadeOutDuration);
 
             // Build audio filter_complex:
             // [0:a] = intro music (looped)
             // [1:a] = voice
+            if ($outroDuration > 0) {
+                $musicVolumeExpr = sprintf(
+                    'if(lt(t,%s),1,' .
+                        'if(lt(t,%s),1-(t-%s)/%s,' .
+                        'if(lt(t,%s),0,' .
+                        'if(lt(t,%s),1,' .
+                        'if(lt(t,%s),1-(t-%s)/%s,0)' .
+                        '))))',
+                    round($introFadeOutStart, 2),
+                    round($voiceStartTime, 2),
+                    round($introFadeOutStart, 2),
+                    round($introFadeOutDuration, 2),
+                    round($voiceEndTime, 2),
+                    round($outroFadeOutStart, 2),
+                    round($voiceEndTime + $outroDuration, 2),
+                    round($outroFadeOutStart, 2),
+                    round($outroFadeOutDuration, 2)
+                );
+            } else {
+                $musicVolumeExpr = sprintf(
+                    'if(lt(t,%s),1,' .
+                        'if(lt(t,%s),1-(t-%s)/%s,0))',
+                    round($introFadeOutStart, 2),
+                    round($voiceStartTime, 2),
+                    round($introFadeOutStart, 2),
+                    round($introFadeOutDuration, 2)
+                );
+            }
+
             $audioFilterComplex = sprintf(
                 // Music: loop to fill total duration, then apply volume envelope
                 '[0:a]aloop=loop=-1:size=2e+09,atrim=0:%s,' .
-                    // Volume envelope: full → fade down → low → fade up → fade out
-                    'volume=eval=frame:volume=\'' .
-                    'if(lt(t,%s), 1,' .              // 0 → t1: full volume
-                    'if(lt(t,%s), 1-0.85*(t-%s)/2,' . // t1 → t2: fade 1.0→0.15
-                    'if(lt(t,%s), 0.15,' .             // t2 → t3: low at 0.15 (during voice)
-                    'if(lt(t,%s), 0.15+0.65*(t-%s)/2,' . // t3 → t4: fade 0.15→0.8
-                    'max(0, 0.8*(1-(t-%s)/%s))' .      // t4 → t5: fade 0.8→0
-                    '))))\',aformat=sample_fmts=fltp[music];' .
+                    'volume=eval=frame:volume=\'%s\',aformat=sample_fmts=fltp[music];' .
                     // Voice: delay by intro_fade seconds
                     '[1:a]adelay=%d|%d,aformat=sample_fmts=fltp[voice];' .
                     // Mix both tracks
                     '[music][voice]amix=inputs=2:duration=first:dropout_transition=3[mixout]',
-                round($t5, 2),
-                round($t1, 2),
-                round($t2, 2),
-                round($t1, 2),
-                round($t3, 2),
-                round($t4, 2),
-                round($t3, 2),
-                round($t4, 2),
-                round($fadeOutTime, 2),
+                round($totalDuration, 2),
+                $musicVolumeExpr,
                 (int) ($voiceStartTime * 1000),
                 (int) ($voiceStartTime * 1000)
             );
@@ -1038,10 +1084,28 @@ class AudioBookController extends Controller
                 escapeshellarg($mixedAudioPath)
             );
 
+            $this->updateDescriptionVideoProgress($audioBook->id, [
+                'status' => 'processing',
+                'percent' => 20,
+                'message' => 'Đang trộn audio...'
+            ]);
+
+            $this->updateDescriptionVideoLog($audioBook->id, 'FFmpeg: bat dau tron audio');
+
             Log::info("FFmpeg audio mix command", ['cmd' => $mixCmd]);
             exec($mixCmd, $mixOutput, $mixReturnCode);
 
+            foreach (array_slice($mixOutput, -10) as $line) {
+                $this->updateDescriptionVideoLog($audioBook->id, trim((string) $line));
+            }
+
             if ($mixReturnCode !== 0 || !file_exists($mixedAudioPath)) {
+                $this->updateDescriptionVideoProgress($audioBook->id, [
+                    'status' => 'error',
+                    'percent' => 0,
+                    'message' => 'FFmpeg không thể mix audio.'
+                ]);
+                $this->updateDescriptionVideoLog($audioBook->id, 'FFmpeg: tron audio that bai');
                 Log::error("FFmpeg audio mix failed", [
                     'return_code' => $mixReturnCode,
                     'output' => implode("\n", $mixOutput)
@@ -1052,6 +1116,14 @@ class AudioBookController extends Controller
                     'error' => 'FFmpeg không thể mix audio. Return code: ' . $mixReturnCode
                 ], 500);
             }
+
+            $this->updateDescriptionVideoProgress($audioBook->id, [
+                'status' => 'processing',
+                'percent' => 45,
+                'message' => 'Đã trộn audio. Đang tạo video...'
+            ]);
+
+            $this->updateDescriptionVideoLog($audioBook->id, 'FFmpeg: bat dau tao video');
 
             // ============================
             // Step 2: Create video (image + mixed audio + wave overlay)
@@ -1078,9 +1150,9 @@ class AudioBookController extends Controller
             // Video filter with zoompan + wave overlay
             // Input 0: image (looped), Input 1: mixed audio
             $videoFilterComplex = sprintf(
-                // Image → scale/pad → zoompan
+                // Image → scale/pad → zoompan (oscillating zoom in/out across duration)
                 '[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,' .
-                    'zoompan=z=\'min(zoom+0.0003,1.2)\':d=%d:x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':s=1920x1080:fps=25[bg];' .
+                    'zoompan=z=\'min(1.06,max(1.0,1+0.02*sin(2*PI*on/(25*20))))\':d=%d:x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':s=1920x1080:fps=25[bg];' .
                     // Wave visualization from mixed audio
                     '[1:a]showwaves=s=1920x%d:mode=%s:colors=0x%s@%.1f:rate=25[wave];' .
                     // Overlay wave on video
@@ -1096,7 +1168,7 @@ class AudioBookController extends Controller
             $videoCmd = sprintf(
                 '%s -y -loop 1 -i %s -i %s -filter_complex "%s" -map "[out]" -map 1:a ' .
                     '-c:v libx264 -preset medium -tune stillimage -crf 23 -c:a aac -b:a 192k ' .
-                    '-pix_fmt yuv420p -t %s -movflags +faststart %s 2>&1',
+                    '-pix_fmt yuv420p -t %s -movflags +faststart -progress pipe:1 -stats %s',
                 $ffmpeg,
                 escapeshellarg($imagePath),
                 escapeshellarg($mixedAudioPath),
@@ -1106,12 +1178,27 @@ class AudioBookController extends Controller
             );
 
             Log::info("FFmpeg video command", ['cmd' => $videoCmd]);
-            exec($videoCmd, $videoOutput, $videoReturnCode);
+            $videoResult = $this->runFfmpegWithProgress(
+                $videoCmd,
+                $audioBook->id,
+                $totalDuration,
+                45,
+                95
+            );
+
+            $videoReturnCode = $videoResult['return_code'];
+            $videoOutput = $videoResult['output'];
 
             // Cleanup temp
             $this->cleanupDirectory($tempDir);
 
             if ($videoReturnCode !== 0 || !file_exists($outputPath)) {
+                $this->updateDescriptionVideoProgress($audioBook->id, [
+                    'status' => 'error',
+                    'percent' => 0,
+                    'message' => 'FFmpeg không thể tạo video.'
+                ]);
+                $this->updateDescriptionVideoLog($audioBook->id, 'FFmpeg: tao video that bai');
                 Log::error("FFmpeg intro video failed", [
                     'return_code' => $videoReturnCode,
                     'output' => implode("\n", $videoOutput)
@@ -1139,6 +1226,16 @@ class AudioBookController extends Controller
                 'description_scene_video_duration' => $videoDuration
             ]);
 
+            $this->updateDescriptionVideoProgress($audioBook->id, [
+                'status' => 'completed',
+                'percent' => 100,
+                'message' => 'Hoàn tất!',
+                'video_url' => $videoUrl,
+                'video_duration' => $videoDuration
+            ]);
+
+            $this->updateDescriptionVideoLog($audioBook->id, 'FFmpeg: tao video hoan tat');
+
             $videoUrl = asset('storage/' . $relativePath);
             Log::info("Intro video generated successfully", [
                 'path' => $relativePath,
@@ -1153,6 +1250,12 @@ class AudioBookController extends Controller
                 'message' => 'Video giới thiệu đã được tạo thành công!'
             ]);
         } catch (\Exception $e) {
+            $this->updateDescriptionVideoProgress($audioBook->id, [
+                'status' => 'error',
+                'percent' => 0,
+                'message' => 'Lỗi tạo video.'
+            ]);
+            $this->updateDescriptionVideoLog($audioBook->id, 'Loi: ' . $e->getMessage());
             Log::error("Generate description video failed for audiobook {$audioBook->id}: " . $e->getMessage());
 
             return response()->json([
@@ -1160,6 +1263,84 @@ class AudioBookController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Start description intro video generation in background.
+     */
+    public function startDescriptionVideoJob(Request $request, AudioBook $audioBook)
+    {
+        $this->resetDescriptionVideoProgress($audioBook->id);
+
+        $request->validate([
+            'image_path' => 'required|string',
+            'image_type' => 'required|string|in:thumbnails,scenes'
+        ]);
+
+        try {
+            GenerateDescriptionVideoJob::dispatch(
+                $audioBook->id,
+                $request->input('image_path'),
+                $request->input('image_type')
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Đã nhận yêu cầu tạo video. Đang xử lý...'
+            ]);
+        } catch (\Throwable $e) {
+            $this->updateDescriptionVideoProgress($audioBook->id, [
+                'status' => 'error',
+                'percent' => 0,
+                'message' => 'Không thể khởi tạo job.'
+            ]);
+            $this->updateDescriptionVideoLog($audioBook->id, 'Loi khoi tao job: ' . $e->getMessage());
+
+            Log::error('Start description video job failed', [
+                'audiobook_id' => $audioBook->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get description intro video generation progress.
+     */
+    public function getDescriptionVideoProgress(AudioBook $audioBook)
+    {
+        $key = "desc_video_progress_{$audioBook->id}";
+        $progress = Cache::get($key);
+        $logKey = "desc_video_log_{$audioBook->id}";
+        $logs = Cache::get($logKey, []);
+
+        if (!$progress) {
+            return response()->json([
+                'success' => true,
+                'status' => 'idle',
+                'percent' => 0,
+                'message' => '',
+                'completed' => false,
+                'logs' => $logs,
+                'video_url' => null,
+                'video_duration' => null
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'status' => $progress['status'] ?? 'processing',
+            'percent' => $progress['percent'] ?? 0,
+            'message' => $progress['message'] ?? '',
+            'completed' => ($progress['status'] ?? '') === 'completed',
+            'logs' => $logs,
+            'video_url' => $progress['video_url'] ?? null,
+            'video_duration' => $progress['video_duration'] ?? null
+        ]);
     }
 
     /**
@@ -3053,6 +3234,134 @@ class AudioBookController extends Controller
         }
 
         rmdir($dir);
+    }
+
+    private function updateDescriptionVideoProgress(int $audioBookId, array $data): void
+    {
+        $payload = array_merge([
+            'status' => 'processing',
+            'percent' => 0,
+            'message' => '',
+            'updated_at' => now()->toIso8601String()
+        ], $data);
+
+        Cache::put("desc_video_progress_{$audioBookId}", $payload, now()->addMinutes(20));
+    }
+
+    private function resetDescriptionVideoProgress(int $audioBookId): void
+    {
+        Cache::forget("desc_video_progress_{$audioBookId}");
+        Cache::forget("desc_video_log_{$audioBookId}");
+        $this->updateDescriptionVideoProgress($audioBookId, [
+            'status' => 'processing',
+            'percent' => 1,
+            'message' => 'Đang khởi tạo...'
+        ]);
+    }
+
+    private function updateDescriptionVideoLog(int $audioBookId, string $line): void
+    {
+        $key = "desc_video_log_{$audioBookId}";
+        $logs = Cache::get($key, []);
+        $timestamp = now()->format('H:i:s');
+        $logs[] = "[{$timestamp}] {$line}";
+        if (count($logs) > 200) {
+            $logs = array_slice($logs, -200);
+        }
+        Cache::put($key, $logs, now()->addMinutes(20));
+    }
+
+    private function runFfmpegWithProgress(
+        string $command,
+        int $audioBookId,
+        float $totalDuration,
+        int $baseStart,
+        int $baseEnd
+    ): array {
+        $output = [];
+        $descriptorSpec = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w']
+        ];
+
+        $process = \proc_open($command, $descriptorSpec, $pipes);
+        if (!is_resource($process)) {
+            $this->updateDescriptionVideoLog($audioBookId, 'FFmpeg: khong the khoi tao process');
+            return ['return_code' => 1, 'output' => []];
+        }
+
+        fclose($pipes[0]);
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+
+        $lastPercent = 0;
+        $lastLogAt = time();
+        $buffer = '';
+
+        while (true) {
+            $read = [$pipes[1], $pipes[2]];
+            $write = null;
+            $except = null;
+            stream_select($read, $write, $except, 1);
+
+            foreach ($read as $stream) {
+                $data = stream_get_contents($stream);
+                if ($data === false || $data === '') {
+                    continue;
+                }
+                $buffer .= $data;
+                $lines = explode("\n", $buffer);
+                $buffer = array_pop($lines);
+
+                foreach ($lines as $line) {
+                    $line = trim($line);
+                    if ($line === '') {
+                        continue;
+                    }
+                    $output[] = $line;
+
+                    if (str_starts_with($line, 'out_time_ms=')) {
+                        $value = (int) str_replace('out_time_ms=', '', $line);
+                        if ($totalDuration > 0) {
+                            $percent = $baseStart + (int) round(($value / ($totalDuration * 1000000)) * ($baseEnd - $baseStart));
+                            $percent = min($baseEnd, max($baseStart, $percent));
+                            if ($percent !== $lastPercent) {
+                                $lastPercent = $percent;
+                                $this->updateDescriptionVideoProgress($audioBookId, [
+                                    'status' => 'processing',
+                                    'percent' => $percent,
+                                    'message' => 'Đang tạo video...'
+                                ]);
+                            }
+                        }
+                    }
+
+                    if (str_starts_with($line, 'frame=') || str_starts_with($line, 'fps=') || str_starts_with($line, 'speed=')) {
+                        if (time() - $lastLogAt >= 2) {
+                            $this->updateDescriptionVideoLog($audioBookId, "FFmpeg: {$line}");
+                            $lastLogAt = time();
+                        }
+                    }
+                }
+            }
+
+            $status = proc_get_status($process);
+            if (!$status['running']) {
+                break;
+            }
+        }
+
+        $remaining = trim($buffer);
+        if ($remaining !== '') {
+            $output[] = $remaining;
+        }
+
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $returnCode = proc_close($process);
+
+        return ['return_code' => $returnCode, 'output' => $output];
     }
 
     // ========== Auto Publish to YouTube Methods ==========
