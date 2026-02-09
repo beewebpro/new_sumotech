@@ -6,6 +6,7 @@ use App\Models\AudioBook;
 use App\Models\AudioBookChapter;
 use App\Models\ChannelSpeaker;
 use App\Models\YoutubeChannel;
+use App\Services\BookScrapers\Docsach24Scraper;
 use App\Services\BookScrapers\NhaSachMienPhiScraper;
 use App\Services\TTSService;
 use App\Services\GeminiImageService;
@@ -44,6 +45,20 @@ class AudioBookController extends Controller
         $this->segmentManager = $segmentManager;
         $this->compositionService = $compositionService;
         $this->descVideoService = $descVideoService;
+    }
+
+    protected function getScrapeSources(): array
+    {
+        return [
+            'nhasachmienphi' => [
+                'label' => 'nhasachmienphi.com',
+                'domains' => ['nhasachmienphi.com', 'www.nhasachmienphi.com']
+            ],
+            'docsach24' => [
+                'label' => 'docsach24.co',
+                'domains' => ['docsach24.co', 'www.docsach24.co']
+            ]
+        ];
     }
 
     /**
@@ -134,7 +149,9 @@ class AudioBookController extends Controller
                 ->get();
         }
 
-        return view('audiobooks.show', compact('audioBook', 'speakers'));
+        $scrapeSources = $this->getScrapeSources();
+
+        return view('audiobooks.show', compact('audioBook', 'speakers', 'scrapeSources'));
     }
 
     /**
@@ -218,15 +235,35 @@ class AudioBookController extends Controller
     {
         $request->validate([
             'book_url' => 'required|url',
+            'book_source' => 'required|string',
             'audio_book_id' => 'required|exists:audio_books,id'
         ]);
 
         $audioBook = AudioBook::findOrFail($request->input('audio_book_id'));
         $bookUrl = $request->input('book_url');
+        $bookSource = $request->input('book_source');
+        $scrapeSources = $this->getScrapeSources();
+
+        if (!isset($scrapeSources[$bookSource])) {
+            return response()->json(['error' => 'Nguồn scrape không hợp lệ'], 400);
+        }
+
+        $host = parse_url($bookUrl, PHP_URL_HOST);
+        if (!$host || !in_array($host, $scrapeSources[$bookSource]['domains'], true)) {
+            return response()->json(['error' => 'URL không thuộc nguồn đã chọn'], 400);
+        }
 
         try {
             // Detect website and use appropriate scraper
-            $scraper = new NhaSachMienPhiScraper($bookUrl);
+            switch ($bookSource) {
+                case 'docsach24':
+                    $scraper = new Docsach24Scraper($bookUrl);
+                    break;
+                case 'nhasachmienphi':
+                default:
+                    $scraper = new NhaSachMienPhiScraper($bookUrl);
+                    break;
+            }
             $result = $scraper->scrape();
 
             if (isset($result['error'])) {
