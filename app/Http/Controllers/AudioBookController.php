@@ -2504,6 +2504,7 @@ class AudioBookController extends Controller
             'text_options.text_color' => 'nullable|string',
             'text_options.outline_color' => 'nullable|string',
             'text_options.outline_width' => 'nullable|integer|min:2|max:8',
+            'text_options.text_mode' => 'nullable|string|in:number,title,both',
             'text_options.position_x' => 'nullable|numeric|min:0|max:100',
             'text_options.position_y' => 'nullable|numeric|min:0|max:100',
         ]);
@@ -2517,6 +2518,7 @@ class AudioBookController extends Controller
         $textColor = $textOptions['text_color'] ?? '#FFFFFF';
         $outlineColor = $textOptions['outline_color'] ?? '#000000';
         $outlineWidth = $textOptions['outline_width'] ?? 4;
+        $textMode = $textOptions['text_mode'] ?? 'number';
         $positionX = $textOptions['position_x'] ?? 50; // Center X
         $positionY = $textOptions['position_y'] ?? 15; // Top area
 
@@ -2569,7 +2571,16 @@ class AudioBookController extends Controller
                 }
 
                 // Prepare text
-                $chapterText = "Chương " . $chapter->chapter_number;
+                $chapterTitle = trim((string) $chapter->title);
+                if ($textMode === 'title') {
+                    $chapterText = $chapterTitle !== '' ? $chapterTitle : "Chương " . $chapter->chapter_number;
+                } elseif ($textMode === 'both') {
+                    $chapterText = $chapterTitle !== ''
+                        ? "Chương " . $chapter->chapter_number . ": " . $chapterTitle
+                        : "Chương " . $chapter->chapter_number;
+                } else {
+                    $chapterText = "Chương " . $chapter->chapter_number;
+                }
 
                 // Build FFmpeg drawtext filter with custom options
                 // Calculate absolute position based on percentage

@@ -944,7 +944,7 @@
 
                             <!-- ========== DESCRIPTION VIDEO PIPELINE (Chunked) ========== -->
                             <div
-                                class="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-300 rounded-lg p-5">
+                                class="hidden bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-300 rounded-lg p-5">
                                 <h4 class="text-base font-semibold text-emerald-800 mb-3 flex items-center gap-2">
                                     🎬 Tạo Video Giới Thiệu Sách (Pipeline)
                                 </h4>
@@ -2077,6 +2077,28 @@
                                     oninput="updateChapterTextPreview()">
                                 <span id="outlineWidthDisplay"
                                     class="text-xs font-semibold text-orange-700 w-8 text-center">4</span>
+                            </div>
+                        </div>
+
+                        <!-- Text Content Mode -->
+                        <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                            <label class="block text-sm font-medium text-emerald-700 mb-2">📝 Nội dung hiển thị:</label>
+                            <div class="grid grid-cols-1 gap-2">
+                                <label class="flex items-center gap-2 p-2 bg-white rounded border cursor-pointer hover:border-emerald-400">
+                                    <input type="radio" name="chapterTextMode" value="number" checked
+                                        class="text-emerald-600" onchange="updateChapterTextPreview()">
+                                    <span class="text-xs">Chương X</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-white rounded border cursor-pointer hover:border-emerald-400">
+                                    <input type="radio" name="chapterTextMode" value="title"
+                                        class="text-emerald-600" onchange="updateChapterTextPreview()">
+                                    <span class="text-xs">Tên chương</span>
+                                </label>
+                                <label class="flex items-center gap-2 p-2 bg-white rounded border cursor-pointer hover:border-emerald-400">
+                                    <input type="radio" name="chapterTextMode" value="both"
+                                        class="text-emerald-600" onchange="updateChapterTextPreview()">
+                                    <span class="text-xs">Chương X: Tên chương</span>
+                                </label>
                             </div>
                         </div>
 
@@ -5580,6 +5602,7 @@
             const textColor = document.querySelector('input[name="chapterTextColor"]:checked').value;
             const outlineColor = document.querySelector('input[name="chapterOutlineColor"]:checked').value;
             const outlineWidth = document.getElementById('chapterOutlineWidth').value;
+            const textMode = document.querySelector('input[name="chapterTextMode"]:checked')?.value || 'number';
             const posX = document.getElementById('textPositionX').value;
             const posY = document.getElementById('textPositionY').value;
 
@@ -5602,6 +5625,14 @@
             badge.style.backgroundColor = outlineColor;
             badge.style.borderWidth = (outlineWidth / 2) + 'px';
             badge.style.borderColor = outlineColor;
+
+            if (textMode === 'title') {
+                badge.textContent = 'Tên chương';
+            } else if (textMode === 'both') {
+                badge.textContent = 'Chương 1: Tên chương';
+            } else {
+                badge.textContent = 'Chương 1';
+            }
 
             // Add text shadow for better visibility
             const shadowColor = textColor === '#FFFFFF' ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)';
@@ -5628,6 +5659,7 @@
             const textColor = document.querySelector('input[name="chapterTextColor"]:checked').value;
             const outlineColor = document.querySelector('input[name="chapterOutlineColor"]:checked').value;
             const outlineWidth = parseInt(document.getElementById('chapterOutlineWidth').value);
+            const textMode = document.querySelector('input[name="chapterTextMode"]:checked')?.value || 'number';
             const posX = parseFloat(document.getElementById('textPositionX').value);
             const posY = parseFloat(document.getElementById('textPositionY').value);
 
@@ -5655,6 +5687,7 @@
                             text_color: textColor,
                             outline_color: outlineColor,
                             outline_width: outlineWidth,
+                            text_mode: textMode,
                             position_x: posX,
                             position_y: posY
                         }
