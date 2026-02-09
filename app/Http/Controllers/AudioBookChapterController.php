@@ -849,7 +849,7 @@ class AudioBookChapterController extends Controller
 
         // Try ffprobe first
         $command = "ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{$filePath}\" 2>&1";
-        exec($command, $output, $returnCode);
+        \exec($command, $output, $returnCode);
 
         if ($returnCode === 0 && isset($output[0]) && is_numeric($output[0])) {
             return (float) $output[0];

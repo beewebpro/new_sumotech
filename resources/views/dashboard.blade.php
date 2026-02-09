@@ -23,7 +23,7 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
                 <div class="flex items-center">
-                    <img src="{{ asset('img/logo/sumotech_round.png') }}" alt="Sumotech" class="h-12 w-auto" />
+                    <img src="{{ asset('img/logo/Sumotech_round.png') }}" alt="Sumotech" class="h-12 w-auto" />
                 </div>
                 <div class="hidden md:block">
                     <div class="ml-10 flex items-baseline space-x-8">

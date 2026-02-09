@@ -50,7 +50,7 @@
                 </div>
             </div>
             <div class="flex justify-center mb-8 mt-4">
-                <img src="{{ asset('img/logo/sumotech_round.png') }}" alt="Sumotech" class="h-14 w-auto" />
+                <img src="{{ asset('img/logo/Sumotech_round.png') }}" alt="Sumotech" class="h-14 w-auto" />
             </div>
 
             <div class="bg-white/90 backdrop-blur-sm border border-gray-100 rounded-2xl shadow-sm p-6 sm:p-8">

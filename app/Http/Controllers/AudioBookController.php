@@ -2585,8 +2585,8 @@ class AudioBookController extends Controller
 
         // Linux fonts
         $linuxFonts = [
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+            public_path('fonts/DejaVuSans-Bold.ttf'),
+            public_path('fonts/LiberationSans-Bold.ttf'),
         ];
 
         $fonts = PHP_OS_FAMILY === 'Windows' ? $windowsFonts : $linuxFonts;

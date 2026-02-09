@@ -627,7 +627,7 @@ class TTSService
 
         // Path to Python script
         $scriptPath = storage_path('scripts/edge_tts_generate.py');
-        $pythonPath = base_path('.venv/Scripts/python.exe');
+        $pythonPath = base_path('.venv/bin/python');
 
         // Escape text for command line
         $escapedText = str_replace(['"', "\n", "\r"], ['\\"', ' ', ' '], $text);
@@ -641,7 +641,7 @@ class TTSService
             'output' => $outputPath
         ]);
 
-        exec($command, $output, $returnCode);
+        \exec($command, $output, $returnCode);
 
         if ($returnCode !== 0 || !file_exists($outputPath)) {
             Log::error('Edge TTS Error', [
