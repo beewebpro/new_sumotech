@@ -15,9 +15,9 @@
                             ← Quay lại kênh
                         </a>
                     @else
-                        <a href="{{ route('audiobooks.index') }}"
+                        <a href="{{ route('youtube-channels.index') }}"
                             class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg transition duration-200">
-                            ← Quay lại
+                            ← Quay lại danh sách kênh
                         </a>
                     @endif
                     <a href="{{ route('audiobooks.edit', $audioBook) }}"
@@ -191,6 +191,23 @@
                                     placeholder="Nhập mô tả/giới thiệu sách...">{{ $audioBook->description ?? '' }}</textarea>
 
                                 <div id="descStatus" class="mt-2 text-xs"></div>
+                                <div id="descVideoProgress" class="mt-2 hidden">
+                                    <div class="flex items-center justify-between text-[11px] text-emerald-700 mb-1">
+                                        <span id="descVideoProgressLabel">Đang tạo video...</span>
+                                        <span id="descVideoProgressPercent">0%</span>
+                                    </div>
+                                    <div class="w-full bg-emerald-100 rounded-full h-2">
+                                        <div id="descVideoProgressBar"
+                                            class="bg-emerald-500 h-2 rounded-full transition-all duration-300"
+                                            style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <div id="descVideoLog" class="mt-2 hidden">
+                                    <div class="text-[11px] text-gray-600 mb-1">Log FFmpeg:</div>
+                                    <div id="descVideoLogContent"
+                                        class="max-h-32 overflow-y-auto text-[11px] bg-gray-50 border border-gray-200 rounded p-2 whitespace-pre-wrap">
+                                    </div>
+                                </div>
 
                                 <!-- Description Audio Player -->
                                 <div id="descAudioContainer"
@@ -390,6 +407,62 @@
                                                     title="Nghe thử giọng">
                                                     🔊
                                                 </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Speed & Pause Settings -->
+                                    <div class="bg-white p-3 rounded border border-blue-200">
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Tốc độ & Khoảng
+                                            nghỉ:</label>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label class="block text-xs text-gray-500 mb-1">Tốc độ đọc</label>
+                                                <select id="ttsSpeedSelect"
+                                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:outline-none">
+                                                    <option value="0.7"
+                                                        {{ ($audioBook->tts_speed ?? 1.0) == 0.7 ? 'selected' : '' }}>0.7x
+                                                        (Rất chậm)</option>
+                                                    <option value="0.8"
+                                                        {{ ($audioBook->tts_speed ?? 1.0) == 0.8 ? 'selected' : '' }}>0.8x
+                                                        (Chậm)</option>
+                                                    <option value="0.9"
+                                                        {{ ($audioBook->tts_speed ?? 1.0) == 0.9 ? 'selected' : '' }}>0.9x
+                                                        (Hơi chậm)</option>
+                                                    <option value="1.0"
+                                                        {{ ($audioBook->tts_speed ?? 1.0) == 1.0 ? 'selected' : '' }}>1.0x
+                                                        (Bình thường)</option>
+                                                    <option value="1.1"
+                                                        {{ ($audioBook->tts_speed ?? 1.0) == 1.1 ? 'selected' : '' }}>1.1x
+                                                        (Hơi nhanh)</option>
+                                                    <option value="1.2"
+                                                        {{ ($audioBook->tts_speed ?? 1.0) == 1.2 ? 'selected' : '' }}>1.2x
+                                                        (Nhanh)</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs text-gray-500 mb-1">Nghỉ giữa đoạn</label>
+                                                <select id="pauseBetweenChunksSelect"
+                                                    class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:border-blue-500 focus:outline-none">
+                                                    <option value="0"
+                                                        {{ ($audioBook->pause_between_chunks ?? 1.0) == 0 ? 'selected' : '' }}>
+                                                        0s (Không nghỉ)</option>
+                                                    <option value="0.5"
+                                                        {{ ($audioBook->pause_between_chunks ?? 1.0) == 0.5 ? 'selected' : '' }}>
+                                                        0.5s</option>
+                                                    <option value="1.0"
+                                                        {{ ($audioBook->pause_between_chunks ?? 1.0) == 1.0 ? 'selected' : '' }}>
+                                                        1.0s</option>
+                                                    <option value="1.5"
+                                                        {{ ($audioBook->pause_between_chunks ?? 1.0) == 1.5 ? 'selected' : '' }}>
+                                                        1.5s</option>
+                                                    <option value="2.0"
+                                                        {{ ($audioBook->pause_between_chunks ?? 1.0) == 2.0 ? 'selected' : '' }}>
+                                                        2.0s</option>
+                                                    <option value="3.0"
+                                                        {{ ($audioBook->pause_between_chunks ?? 1.0) == 3.0 ? 'selected' : '' }}>
+                                                        3.0s</option>
+                                                </select>
                                             </div>
                                         </div>
                                     </div>
@@ -1245,6 +1318,28 @@
                             </div>
                         </div>
 
+                        {{-- YouTube Upload Limits Warning --}}
+                        <div class="mb-6 p-4 bg-amber-50 rounded-lg border border-amber-200">
+                            <div class="flex items-start gap-3">
+                                <svg class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none"
+                                    stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <div>
+                                    <p class="text-sm font-semibold text-amber-800 mb-1">⚠️ Giới hạn Upload YouTube</p>
+                                    <ul class="text-xs text-amber-700 space-y-0.5">
+                                        <li>• <strong>Tài khoản chưa xác minh:</strong> 6 videos/ngày</li>
+                                        <li>• <strong>Quota API:</strong> ~6 videos/ngày (10,000 units)</li>
+                                        <li>• <strong>Reset:</strong> Sau 24 giờ theo giờ Pacific Time (PST)</li>
+                                        <li>• <strong>Khuyến nghị:</strong> <a href="https://www.youtube.com/verify"
+                                                target="_blank" class="underline font-medium">Xác minh kênh YouTube</a> để
+                                            tăng giới hạn</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
                         <div id="publishFormWrapper" class="hidden">
                             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 {{-- Left Column: Settings --}}
@@ -1278,8 +1373,15 @@
 
                                     {{-- Video Source Selection --}}
                                     <div>
-                                        <label class="block text-sm font-semibold text-gray-700 mb-3">Chọn video
-                                            nguồn</label>
+                                        <div class="flex items-center justify-between mb-3">
+                                            <label class="block text-sm font-semibold text-gray-700">Chọn video
+                                                nguồn</label>
+                                            <button type="button" id="selectAllVideoSourcesBtn"
+                                                onclick="toggleSelectAllVideoSources()"
+                                                class="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition border border-gray-300">
+                                                ☑️ Chọn tất cả
+                                            </button>
+                                        </div>
                                         <div id="publishVideoSources"
                                             class="space-y-2 max-h-60 overflow-y-auto border rounded-lg p-3">
                                             <p class="text-sm text-gray-400">Đang tải danh sách video...</p>
@@ -1340,30 +1442,73 @@
                                     {{-- Playlist Section (hidden by default) --}}
                                     <div id="playlistSection" class="hidden">
                                         <div class="border-t pt-4">
-                                            <div class="flex items-center justify-between mb-3">
-                                                <label class="block text-sm font-semibold text-gray-700">Playlist: Phiên
-                                                    bản con cho từng video</label>
-                                                <button type="button" id="generatePlaylistMetaBtn"
-                                                    class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition">
-                                                    🔄 Tạo phiên bản con (AI)
-                                                </button>
+                                            {{-- Playlist Mode: Create New or Select Existing --}}
+                                            <div class="mb-4">
+                                                <label class="block text-sm font-semibold text-gray-700 mb-2">Chọn
+                                                    Playlist</label>
+                                                <div class="flex gap-3">
+                                                    <label
+                                                        class="flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer hover:bg-indigo-50 transition playlist-type-label">
+                                                        <input type="radio" name="playlistType" value="new" checked
+                                                            class="text-indigo-600 playlist-type-radio">
+                                                        <span class="text-sm font-medium">Tạo playlist mới</span>
+                                                    </label>
+                                                    <label
+                                                        class="flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer hover:bg-indigo-50 transition playlist-type-label">
+                                                        <input type="radio" name="playlistType" value="existing"
+                                                            class="text-indigo-600 playlist-type-radio">
+                                                        <span class="text-sm font-medium">Chọn playlist có sẵn</span>
+                                                    </label>
+                                                </div>
                                             </div>
-                                            <p class="text-xs text-gray-500 mb-3">AI sẽ chuyển tiêu đề và mô tả chung thành
-                                                phiên bản riêng cho từng chapter video trong playlist.</p>
-                                            <div id="playlistMetaList" class="space-y-3">
-                                                <p class="text-sm text-gray-400 italic">Chọn nhiều video nguồn và nhấn "Tạo
-                                                    phiên bản con" để bắt đầu.</p>
-                                            </div>
-                                        </div>
 
-                                        {{-- Playlist Name --}}
-                                        <div class="mt-4">
-                                            <label class="block text-sm font-semibold text-gray-700 mb-2">Tên
-                                                Playlist</label>
-                                            <input type="text" id="playlistName"
-                                                class="w-full border-gray-300 rounded-lg text-sm"
-                                                placeholder="Tên playlist trên YouTube..."
-                                                value="{{ $audioBook->title }} - Sách Nói">
+                                            {{-- New Playlist Name --}}
+                                            <div id="newPlaylistSection">
+                                                <label class="block text-sm font-semibold text-gray-700 mb-2">Tên Playlist
+                                                    mới</label>
+                                                <input type="text" id="playlistName"
+                                                    class="w-full border-gray-300 rounded-lg text-sm"
+                                                    placeholder="Tên playlist trên YouTube..."
+                                                    value="{{ $audioBook->youtube_playlist_title ?: $audioBook->title . ' - Sách Nói' }}">
+                                            </div>
+
+                                            {{-- Existing Playlist Selector --}}
+                                            <div id="existingPlaylistSection" class="hidden">
+                                                <label class="block text-sm font-semibold text-gray-700 mb-2">Chọn playlist
+                                                    từ kênh YouTube</label>
+                                                <div class="flex gap-2">
+                                                    <select id="existingPlaylistSelect"
+                                                        class="flex-1 border-gray-300 rounded-lg text-sm">
+                                                        <option value="">-- Đang tải playlists... --</option>
+                                                    </select>
+                                                    <button type="button" id="refreshPlaylistsBtn"
+                                                        class="px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm rounded-lg transition"
+                                                        title="Tải lại danh sách">
+                                                        🔄
+                                                    </button>
+                                                </div>
+                                                <p class="text-xs text-gray-400 mt-1" id="existingPlaylistHint"></p>
+                                            </div>
+
+                                            {{-- Phiên bản con --}}
+                                            <div class="mt-4">
+                                                <div class="flex items-center justify-between mb-3">
+                                                    <label class="block text-sm font-semibold text-gray-700">Phiên bản con
+                                                        cho từng video</label>
+                                                    <button type="button" id="generatePlaylistMetaBtn"
+                                                        class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition">
+                                                        🔄 Tạo phiên bản con (AI)
+                                                    </button>
+                                                </div>
+                                                <p class="text-xs text-gray-500 mb-3" id="playlistMetaHint">AI sẽ chuyển
+                                                    tiêu đề và mô tả chung thành
+                                                    phiên bản riêng cho từng chapter video trong playlist.</p>
+                                                <div id="playlistMetaList" class="space-y-3">
+                                                    <p class="text-sm text-gray-400 italic">Chọn nhiều video nguồn và nhấn
+                                                        "Tạo
+                                                        phiên bản con" để bắt đầu.</p>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1396,6 +1541,10 @@
                             {{-- Publish Button --}}
                             <div class="mt-8 border-t pt-6">
                                 <div class="flex items-center gap-4">
+                                    <button type="button" id="savePublishMetaBtn"
+                                        class="px-5 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition text-base">
+                                        💾 Lưu thông tin
+                                    </button>
                                     <button type="button" id="publishToYoutubeBtn"
                                         class="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition text-base">
                                         🚀 Phát hành lên YouTube
@@ -1420,6 +1569,20 @@
                                     </div>
                                 </div>
                                 <div id="publishResult" class="mt-4 hidden"></div>
+                            </div>
+
+                            {{-- Publishing History --}}
+                            <div class="mt-8 border-t pt-6">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h4 class="text-md font-semibold text-gray-800">📋 Lịch sử phát hành YouTube</h4>
+                                    <button type="button" id="refreshHistoryBtn"
+                                        class="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition border border-gray-300">
+                                        🔄 Tải lại
+                                    </button>
+                                </div>
+                                <div id="publishHistoryContainer">
+                                    <p class="text-sm text-gray-400">Đang tải lịch sử...</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1473,14 +1636,16 @@
                                 <div class="flex items-center gap-3">
                                     <span class="text-sm font-semibold text-gray-700">📖 {{ $audioBook->title }}</span>
                                     @if ($audioBook->chapters->count() > 0)
-                                        <label class="inline-flex items-center gap-1 text-sm text-gray-600 cursor-pointer">
+                                        <label
+                                            class="inline-flex items-center gap-1 text-sm text-gray-600 cursor-pointer">
                                             <input type="checkbox" id="selectAllChaptersFloating" class="rounded">
                                             <span>Chọn tất cả</span>
                                         </label>
                                     @endif
                                 </div>
                                 <div class="flex gap-2">
-                                    <button id="generateSelectedTtsBtnFloating" onclick="generateTtsForSelectedChapters()"
+                                    <button id="generateSelectedTtsBtnFloating"
+                                        onclick="generateTtsForSelectedChapters()"
                                         class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-1.5 px-3 rounded-lg transition duration-200 text-sm hidden">
                                         🎙️ TTS (<span id="selectedCountFloating">0</span>)
                                     </button>
@@ -1514,8 +1679,9 @@
                                 <span class="text-sm text-blue-600" id="ttsProgressPercent">0%</span>
                             </div>
                             <div class="w-full bg-blue-200 rounded-full h-2 mb-3">
-                                <div id="ttsProgressBar" class="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                    style="width: 0%"></div>
+                                <div id="ttsProgressBar"
+                                    class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%">
+                                </div>
                             </div>
                             <!-- Detailed chunk progress -->
                             <div id="ttsChunkProgress">
@@ -1899,7 +2065,7 @@
                         required>
                         @foreach ($scrapeSources as $sourceKey => $source)
                             <option value="{{ $sourceKey }}"
-                                data-placeholder="{{ $sourceKey === 'docsach24' ? 'https://docsach24.co/e-book/ten-sach-xxxx.html' : 'https://nhasachmienphi.com/ten-sach.html' }}"
+                                data-placeholder="@if ($sourceKey === 'docsach24') https://docsach24.co/e-book/ten-sach-xxxx.html @elseif($sourceKey === 'vietnamthuquan')http://vietnamthuquan.eu/truyen/truyen.aspx?tid=... @else https://nhasachmienphi.com/ten-sach.html @endif"
                                 data-hint="Chỉ chấp nhận URL thuộc {{ $source['label'] }}.">
                                 {{ $source['label'] }}
                             </option>
@@ -2084,17 +2250,20 @@
                         <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
                             <label class="block text-sm font-medium text-emerald-700 mb-2">📝 Nội dung hiển thị:</label>
                             <div class="grid grid-cols-1 gap-2">
-                                <label class="flex items-center gap-2 p-2 bg-white rounded border cursor-pointer hover:border-emerald-400">
+                                <label
+                                    class="flex items-center gap-2 p-2 bg-white rounded border cursor-pointer hover:border-emerald-400">
                                     <input type="radio" name="chapterTextMode" value="number" checked
                                         class="text-emerald-600" onchange="updateChapterTextPreview()">
                                     <span class="text-xs">Chương X</span>
                                 </label>
-                                <label class="flex items-center gap-2 p-2 bg-white rounded border cursor-pointer hover:border-emerald-400">
+                                <label
+                                    class="flex items-center gap-2 p-2 bg-white rounded border cursor-pointer hover:border-emerald-400">
                                     <input type="radio" name="chapterTextMode" value="title"
                                         class="text-emerald-600" onchange="updateChapterTextPreview()">
                                     <span class="text-xs">Tên chương</span>
                                 </label>
-                                <label class="flex items-center gap-2 p-2 bg-white rounded border cursor-pointer hover:border-emerald-400">
+                                <label
+                                    class="flex items-center gap-2 p-2 bg-white rounded border cursor-pointer hover:border-emerald-400">
                                     <input type="radio" name="chapterTextMode" value="both"
                                         class="text-emerald-600" onchange="updateChapterTextPreview()">
                                     <span class="text-xs">Chương X: Tên chương</span>
@@ -2336,6 +2505,124 @@
                 <button type="button" onclick="closeAddTextModal()"
                     class="px-6 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2.5 rounded-lg font-semibold transition">
                     Đóng
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Logo Overlay Modal -->
+    <div id="addLogoModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-semibold">Logo Overlay</h3>
+                <button type="button" onclick="closeAddLogoModal()"
+                    class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <!-- Left: Image Preview -->
+                    <div>
+                        <p class="text-sm font-medium text-gray-700 mb-2">Thumbnail:</p>
+                        <img id="addLogoPreviewImage" src="" alt="Preview"
+                            class="w-full aspect-video object-cover rounded-lg border">
+                        <input type="hidden" id="addLogoFilename" value="">
+                    </div>
+
+                    <!-- Right: Logo Options -->
+                    <div class="space-y-4">
+                        <!-- Channel Logo Preview -->
+                        <div class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                            <p class="text-xs font-medium text-yellow-700 mb-2">Logo kênh YouTube:</p>
+                            @if ($audioBook->youtubeChannel && $audioBook->youtubeChannel->thumbnail_url)
+                                <img src="{{ str_starts_with($audioBook->youtubeChannel->thumbnail_url, 'http') ? $audioBook->youtubeChannel->thumbnail_url : asset('storage/' . $audioBook->youtubeChannel->thumbnail_url) }}"
+                                    alt="Channel Logo"
+                                    class="w-16 h-16 object-cover rounded-full border-2 border-yellow-300">
+                            @else
+                                <div class="text-xs text-red-500">Kênh YouTube chưa có logo. Vui lòng cập nhật logo cho
+                                    kênh trước.</div>
+                            @endif
+                        </div>
+
+                        <!-- Position Selector -->
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-2">Vị trí logo:</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <label
+                                    class="flex items-center justify-center p-2 bg-white rounded border cursor-pointer hover:border-yellow-400 text-xs has-[:checked]:border-yellow-500 has-[:checked]:bg-yellow-50">
+                                    <input type="radio" name="logoPosition" value="top-left" class="sr-only">
+                                    <span>&#8598; Trên trái</span>
+                                </label>
+                                <label
+                                    class="flex items-center justify-center p-2 bg-white rounded border cursor-pointer hover:border-yellow-400 text-xs has-[:checked]:border-yellow-500 has-[:checked]:bg-yellow-50">
+                                    <input type="radio" name="logoPosition" value="center" class="sr-only">
+                                    <span>&#9678; Giữa</span>
+                                </label>
+                                <label
+                                    class="flex items-center justify-center p-2 bg-white rounded border cursor-pointer hover:border-yellow-400 text-xs has-[:checked]:border-yellow-500 has-[:checked]:bg-yellow-50">
+                                    <input type="radio" name="logoPosition" value="top-right" class="sr-only">
+                                    <span>&#8599; Trên phải</span>
+                                </label>
+                                <label
+                                    class="flex items-center justify-center p-2 bg-white rounded border cursor-pointer hover:border-yellow-400 text-xs has-[:checked]:border-yellow-500 has-[:checked]:bg-yellow-50">
+                                    <input type="radio" name="logoPosition" value="bottom-left" class="sr-only">
+                                    <span>&#8601; Dưới trái</span>
+                                </label>
+                                <label
+                                    class="flex items-center justify-center p-2 bg-white rounded border cursor-pointer hover:border-yellow-400 text-xs opacity-0 pointer-events-none">
+                                    <span>&nbsp;</span>
+                                </label>
+                                <label
+                                    class="flex items-center justify-center p-2 bg-white rounded border cursor-pointer hover:border-yellow-400 text-xs has-[:checked]:border-yellow-500 has-[:checked]:bg-yellow-50">
+                                    <input type="radio" name="logoPosition" value="bottom-right" checked
+                                        class="sr-only">
+                                    <span>&#8600; Dưới phải</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Logo Size -->
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Kích thước logo (% chiều rộng ảnh):</label>
+                            <div class="flex items-center gap-2">
+                                <input type="range" id="logoScale" min="5" max="50" value="15"
+                                    class="flex-1">
+                                <span id="logoScaleValue" class="text-xs w-10 text-center font-medium">15%</span>
+                            </div>
+                        </div>
+
+                        <!-- Opacity -->
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Độ trong suốt:</label>
+                            <div class="flex items-center gap-2">
+                                <input type="range" id="logoOpacity" min="0" max="100"
+                                    value="100" class="flex-1">
+                                <span id="logoOpacityValue" class="text-xs w-10 text-center font-medium">100%</span>
+                            </div>
+                        </div>
+
+                        <!-- Margin -->
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Khoảng cách lề (px):</label>
+                            <input type="number" id="logoMargin" value="20" min="0" max="200"
+                                class="w-full px-3 py-2 border rounded-lg text-sm focus:border-yellow-500 focus:outline-none">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status -->
+            <div id="addLogoStatus" class="mt-4 text-sm"></div>
+
+            <!-- Actions -->
+            <div class="flex gap-3 mt-4">
+                <button type="button" id="applyLogoOverlayBtn" onclick="applyLogoOverlay()"
+                    class="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white py-2.5 rounded-lg font-semibold transition">
+                    🏷️ Gắn Logo
+                </button>
+                <button type="button" onclick="closeAddLogoModal()"
+                    class="px-6 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2.5 rounded-lg font-semibold transition">
+                    ✖️ Đóng
                 </button>
             </div>
         </div>
@@ -2936,23 +3223,31 @@
                 <div class="relative group cursor-pointer" onclick="window.openImagePreview('${thumb.url.replace(/'/g, "\\'")}')">
                     <img src="${thumb.url}" alt="Thumbnail" 
                         class="w-full aspect-video object-cover rounded-lg border shadow-sm hover:shadow-md transition">
-                    <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 rounded-lg transition flex flex-wrap items-center justify-center gap-1 opacity-0 group-hover:opacity-100 pointer-events-none p-2">
-                        <button onclick="event.stopPropagation(); window.openAddTextModal('${thumb.filename.replace(/'/g, "\\'")}', '${thumb.url.replace(/'/g, "\\'")}');" 
-                            class="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded text-xs font-medium pointer-events-auto">
-                            ✏️ Thêm Text
-                        </button>
-                        <button onclick="event.stopPropagation(); window.openChapterCoverModal('${thumb.filename.replace(/'/g, "\\'")}', '${thumb.url.replace(/'/g, "\\'")}');" 
-                            class="bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded text-xs font-medium pointer-events-auto">
-                            📚 Bìa chương
-                        </button>
-                        <button onclick="event.stopPropagation(); window.createAnimation('${thumb.filename.replace(/'/g, "\\'")}');" 
-                            class="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs font-medium pointer-events-auto">
-                            ✨ Animation
-                        </button>
-                        <button onclick="event.stopPropagation(); window.deleteMediaFile('${thumb.filename.replace(/'/g, "\\'")}');" 
-                            class="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs font-medium pointer-events-auto">
-                            🗑️ Xóa
-                        </button>
+                    <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 rounded-lg transition flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-100 pointer-events-none p-1">
+                        <div class="flex flex-wrap items-center justify-center gap-1">
+                            <button onclick="event.stopPropagation(); window.openAddTextModal('${thumb.filename.replace(/'/g, "\\'")}', '${thumb.url.replace(/'/g, "\\'")}');" 
+                                class="bg-indigo-600 hover:bg-indigo-700 text-white px-1.5 py-0.5 rounded text-[10px] font-medium pointer-events-auto whitespace-nowrap">
+                                ✏️ Thêm Text
+                            </button>
+                            <button onclick="event.stopPropagation(); window.openChapterCoverModal('${thumb.filename.replace(/'/g, "\\'")}', '${thumb.url.replace(/'/g, "\\'")}');" 
+                                class="bg-purple-600 hover:bg-purple-700 text-white px-1.5 py-0.5 rounded text-[10px] font-medium pointer-events-auto whitespace-nowrap">
+                                📚 Bìa chương
+                            </button>
+                        </div>
+                        <div class="flex flex-wrap items-center justify-center gap-1">
+                            <button onclick="event.stopPropagation(); window.openAddLogoModal('${thumb.filename.replace(/'/g, "\\'")}', '${thumb.url.replace(/'/g, "\\'")}');"
+                                class="bg-yellow-600 hover:bg-yellow-700 text-white px-1.5 py-0.5 rounded text-[10px] font-medium pointer-events-auto whitespace-nowrap">
+                                🏷️ Logo
+                            </button>
+                            <button onclick="event.stopPropagation(); window.createAnimation('${thumb.filename.replace(/'/g, "\\'")}');"
+                                class="bg-green-600 hover:bg-green-700 text-white px-1.5 py-0.5 rounded text-[10px] font-medium pointer-events-auto whitespace-nowrap">
+                                ✨ Animation
+                            </button>
+                            <button onclick="event.stopPropagation(); window.deleteMediaFile('${thumb.filename.replace(/'/g, "\\'")}');"
+                                class="bg-red-600 hover:bg-red-700 text-white px-1.5 py-0.5 rounded text-[10px] font-medium pointer-events-auto whitespace-nowrap">
+                                🗑️ Xóa
+                            </button>
+                        </div>
                     </div>
                     <div class="text-xs text-gray-500 mt-1 truncate">${thumb.filename}</div>
                 </div>
@@ -3706,7 +4001,10 @@
                 tts_voice_gender: document.querySelector('input[name="voiceGender"]:checked')?.value ||
                     'female',
                 tts_voice_name: document.getElementById('voiceNameSelect').value,
-                tts_style_instruction: document.getElementById('ttsStyleInstruction').value
+                tts_style_instruction: document.getElementById('ttsStyleInstruction').value,
+                tts_speed: parseFloat(document.getElementById('ttsSpeedSelect').value) || 1.0,
+                pause_between_chunks: parseFloat(document.getElementById('pauseBetweenChunksSelect')
+                    .value) || 1.0
             };
 
             try {
@@ -4146,6 +4444,12 @@
             const videoPlayer = document.getElementById('descVideoPlayer');
             const videoDuration = document.getElementById('descVideoDuration');
             const deleteVideoBtn = document.getElementById('deleteDescVideoBtn');
+            const introProgressContainer = document.getElementById('descVideoProgress');
+            const introProgressBar = document.getElementById('descVideoProgressBar');
+            const introProgressPercent = document.getElementById('descVideoProgressPercent');
+            const introProgressLabel = document.getElementById('descVideoProgressLabel');
+            const introLogContainer = document.getElementById('descVideoLog');
+            const introLogContent = document.getElementById('descVideoLogContent');
 
             // Image picker elements
             const loadMediaBtn = document.getElementById('loadDescMediaBtn');
@@ -4158,6 +4462,115 @@
             const generateIntroVideoBtn = document.getElementById('generateDescIntroVideoBtn');
 
             let selectedDescImage = null; // { filename, type, url }
+            let introProgressTimer = null;
+            let introProgressValue = 0;
+
+            function setIntroProgress(value, label) {
+                introProgressValue = Math.min(100, Math.max(0, value));
+                if (introProgressBar) {
+                    introProgressBar.style.width = `${introProgressValue}%`;
+                }
+                if (introProgressPercent) {
+                    introProgressPercent.textContent = `${Math.round(introProgressValue)}%`;
+                }
+                if (label && introProgressLabel) {
+                    introProgressLabel.textContent = label;
+                }
+            }
+
+            async function fetchIntroProgress() {
+                try {
+                    const response = await fetch(`/audiobooks/${audioBookId}/description-video-progress`, {
+                        headers: {
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        }
+                    });
+                    const result = await safeJson(response);
+
+                    if (!result.success || result.status === 'idle') {
+                        return;
+                    }
+
+                    setIntroProgress(result.percent ?? 0, result.message || 'Đang xử lý...');
+
+                    if (introLogContainer && introLogContent) {
+                        const logs = Array.isArray(result.logs) ? result.logs : [];
+                        introLogContent.textContent = logs.join('\n');
+                        if (logs.length > 0) {
+                            introLogContainer.classList.remove('hidden');
+                            introLogContent.scrollTop = introLogContent.scrollHeight;
+                        }
+                    }
+
+                    if (result.status === 'completed') {
+                        stopIntroProgressPolling();
+                        finishIntroProgress(true);
+
+                        if (result.video_url && videoPlayer && videoContainer) {
+                            const refreshedUrl =
+                                `${result.video_url}${result.video_url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+                            videoPlayer.src = refreshedUrl;
+                            videoPlayer.load();
+                            if (result.video_duration) {
+                                const mins = Math.floor(result.video_duration / 60);
+                                const secs = Math.floor(result.video_duration % 60);
+                                videoDuration.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+                            }
+                            videoContainer.classList.remove('hidden');
+                        }
+                    }
+
+                    if (result.status === 'error') {
+                        stopIntroProgressPolling();
+                        finishIntroProgress(false);
+                    }
+                } catch (error) {
+                    // Keep polling; transient error
+                }
+            }
+
+            function startIntroProgressPolling() {
+                if (!introProgressContainer) return;
+                stopIntroProgressPolling();
+                introProgressContainer.classList.remove('hidden');
+                setIntroProgress(1, 'Đang chờ tiến trình từ server...');
+                if (introLogContent) {
+                    introLogContent.textContent = '';
+                }
+                if (introLogContainer) {
+                    introLogContainer.classList.remove('hidden');
+                }
+                fetchIntroProgress();
+                introProgressTimer = setInterval(fetchIntroProgress, 1500);
+            }
+
+            function stopIntroProgressPolling() {
+                if (introProgressTimer) {
+                    clearInterval(introProgressTimer);
+                    introProgressTimer = null;
+                }
+            }
+
+            function finishIntroProgress(success) {
+                if (!introProgressContainer) return;
+                if (introProgressTimer) {
+                    clearInterval(introProgressTimer);
+                    introProgressTimer = null;
+                }
+                if (success) {
+                    setIntroProgress(100, 'Hoàn tất');
+                    setTimeout(() => {
+                        introProgressContainer.classList.add('hidden');
+                        setIntroProgress(0, '');
+                    }, 1500);
+                } else {
+                    setIntroProgress(0, 'Đã dừng');
+                    setTimeout(() => {
+                        introProgressContainer.classList.add('hidden');
+                        setIntroProgress(0, '');
+                    }, 700);
+                }
+            }
 
             if (!saveBtn || !descTextarea) return;
 
@@ -4292,7 +4705,7 @@
 
                     // Check outro music (either dedicated outro or "use intro as outro")
                     const hasOutroMusic = {{ $audioBook->outro_music ? 'true' : 'false' }};
-                    const outroUseIntro = {{ $audioBook->outro_use_intro ? 'true' : 'false' }};
+                    const outroUseIntro = document.getElementById('outroUseIntro')?.checked || false;
                     if (!hasOutroMusic && !outroUseIntro) {
                         statusDiv.innerHTML =
                             '<span class="text-red-600">❌ Chưa có nhạc Outro. Vui lòng upload nhạc Outro hoặc chọn "Dùng nhạc Intro" trong phần "🎵 Nhạc Intro/Outro".</span>';
@@ -4316,44 +4729,34 @@
 
                     statusDiv.innerHTML =
                         '<span class="text-blue-600">🎬 Đang tạo video giới thiệu (ảnh + audio + nhạc nền + sóng âm)... Quá trình có thể mất 1-3 phút.</span>';
+                    startIntroProgressPolling();
 
                     try {
-                        const response = await fetch(`/audiobooks/${audioBookId}/generate-description-video`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                            },
-                            body: JSON.stringify({
-                                image_path: selectedDescImage.filename,
-                                image_type: selectedDescImage.type
-                            })
-                        });
+                        const response = await fetch(
+                            `/audiobooks/${audioBookId}/generate-description-video-async`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                                },
+                                body: JSON.stringify({
+                                    image_path: selectedDescImage.filename,
+                                    image_type: selectedDescImage.type
+                                })
+                            });
 
                         const result = await safeJson(response);
 
-                        if (result.success && result.video_url) {
-                            statusDiv.innerHTML =
-                                '<span class="text-green-600">✅ Đã tạo video giới thiệu thành công!</span>';
-
-                            // Update video player
-                            if (videoPlayer && videoContainer) {
-                                videoPlayer.src = result.video_url;
-                                videoPlayer.load();
-                                if (result.video_duration) {
-                                    const mins = Math.floor(result.video_duration / 60);
-                                    const secs = Math.floor(result.video_duration % 60);
-                                    videoDuration.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-                                }
-                                videoContainer.classList.remove('hidden');
-                            }
-
-                            setTimeout(() => statusDiv.innerHTML = '', 5000);
-                        } else {
+                        if (!result.success) {
                             throw new Error(result.error || 'Không thể tạo video');
                         }
+
+                        statusDiv.innerHTML =
+                            '<span class="text-blue-600">🎬 Đã nhận yêu cầu. Đang xử lý ở server...</span>';
                     } catch (error) {
                         statusDiv.innerHTML = `<span class="text-red-600">❌ ${error.message}</span>`;
+                        stopIntroProgressPolling();
+                        finishIntroProgress(false);
                     } finally {
                         btn.innerHTML = originalText;
                         btn.disabled = false;
@@ -4839,7 +5242,7 @@
                                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
                                     'Accept': 'application/json'
                                 },
-                                signal: AbortSignal.timeout(600000) // 10 minutes timeout
+                                signal: AbortSignal.timeout(1800000) // 30 minutes timeout
                             });
 
                         const result = await safeJson(response);
@@ -4982,7 +5385,9 @@
             const ttsSettings = {
                 provider: provider,
                 voice_name: voiceName,
-                voice_gender: document.querySelector('input[name="voiceGender"]:checked')?.value || 'female'
+                voice_gender: document.querySelector('input[name="voiceGender"]:checked')?.value || 'female',
+                tts_speed: parseFloat(document.getElementById('ttsSpeedSelect').value) || 1.0,
+                pause_between_chunks: parseFloat(document.getElementById('pauseBetweenChunksSelect').value) || 1.0
             };
             if (!providersWithoutStyle.includes(provider)) {
                 ttsSettings.style_instruction = document.getElementById('ttsStyleInstruction').value;
@@ -5501,6 +5906,84 @@
             }
         }
 
+        // ========== ADD LOGO OVERLAY ==========
+        let selectedLogoFilename = '';
+
+        window.openAddLogoModal = function(filename, imageUrl) {
+            selectedLogoFilename = filename;
+            document.getElementById('addLogoPreviewImage').src = imageUrl;
+            document.getElementById('addLogoFilename').value = filename;
+            document.getElementById('addLogoModal').classList.remove('hidden');
+            document.getElementById('addLogoStatus').innerHTML = '';
+        };
+
+        function closeAddLogoModal() {
+            document.getElementById('addLogoModal').classList.add('hidden');
+            selectedLogoFilename = '';
+        }
+
+        // Logo scale slider
+        document.getElementById('logoScale')?.addEventListener('input', function() {
+            document.getElementById('logoScaleValue').textContent = this.value + '%';
+        });
+
+        // Logo opacity slider
+        document.getElementById('logoOpacity')?.addEventListener('input', function() {
+            document.getElementById('logoOpacityValue').textContent = this.value + '%';
+        });
+
+        async function applyLogoOverlay() {
+            const btn = document.getElementById('applyLogoOverlayBtn');
+            const statusDiv = document.getElementById('addLogoStatus');
+            const filename = document.getElementById('addLogoFilename').value;
+
+            if (!filename) {
+                statusDiv.innerHTML = '<span class="text-red-600">Không tìm thấy hình ảnh</span>';
+                return;
+            }
+
+            const position = document.querySelector('input[name="logoPosition"]:checked')?.value || 'bottom-right';
+            const logoScale = parseInt(document.getElementById('logoScale').value || '15');
+            const opacity = parseInt(document.getElementById('logoOpacity').value || '100');
+            const margin = parseInt(document.getElementById('logoMargin').value || '20');
+
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Đang xử lý...';
+            statusDiv.innerHTML = '<span class="text-blue-600">Đang thêm logo...</span>';
+
+            try {
+                const response = await fetch(`/audiobooks/${audioBookId}/media/add-logo-overlay`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        source_image: filename,
+                        position: position,
+                        logo_scale: logoScale,
+                        opacity: opacity,
+                        margin: margin
+                    })
+                });
+
+                const result = await safeJson(response);
+
+                if (result.success) {
+                    statusDiv.innerHTML = '<span class="text-green-600">✅ Đã thêm logo thành công!</span>';
+                    refreshMediaGallery();
+                    setTimeout(() => closeAddLogoModal(), 1500);
+                } else {
+                    throw new Error(result.error || 'Không thể thêm logo');
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<span class="text-red-600">${error.message}</span>`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🏷️ Gắn Logo';
+            }
+        }
+
         // ========== CHAPTER COVER GENERATION ==========
         let selectedCoverImageFilename = '';
 
@@ -5557,10 +6040,10 @@
                             <span class="text-gray-800">${ch.title || 'Chưa có tiêu đề'}</span>
                         </div>
                         ${ch.has_cover ? `
-                                                                                                                                                                    <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Đã có bìa</span>
-                                                                                                                                                                ` : `
-                                                                                                                                                                    <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">Chưa có bìa</span>
-                                                                                                                                                                `}
+                                                                                                                                                                                            <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Đã có bìa</span>
+                                                                                                                                                                                        ` : `
+                                                                                                                                                                                            <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">Chưa có bìa</span>
+                                                                                                                                                                                        `}
                     </label>
                 `).join('');
 
@@ -5809,7 +6292,9 @@
                     provider: document.getElementById('ttsProviderSelect')?.value || 'openai',
                     voice_name: document.getElementById('voiceNameSelect')?.value || '',
                     voice_gender: document.querySelector('input[name="voiceGender"]:checked')?.value || 'female',
-                    style_instruction: document.getElementById('ttsStyleInstruction')?.value || ''
+                    style_instruction: document.getElementById('ttsStyleInstruction')?.value || '',
+                    tts_speed: parseFloat(document.getElementById('ttsSpeedSelect')?.value) || 1.0,
+                    pause_between_chunks: parseFloat(document.getElementById('pauseBetweenChunksSelect')?.value) || 1.0
                 };
             }
 
@@ -6243,6 +6728,9 @@
             let publishData = null;
             let selectedThumbnailUrl = '';
             let playlistChildMeta = [];
+            let savedPlaylistId = null;
+            let savedPlaylistTitle = null;
+            let existingPlaylists = [];
 
             const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
             const publishBaseUrl = `/audiobooks/${audioBookId}/publish`;
@@ -6253,8 +6741,10 @@
                 checkYoutubeConnection();
                 loadPublishData();
                 setupPublishModeToggle();
+                setupPlaylistTypeToggle();
                 setupAIButtons();
                 setupPublishButton();
+                setupSaveMetaButton();
             };
 
             // ---- Check YouTube Connection ----
@@ -6303,6 +6793,45 @@
                     publishData = await safeJson(resp);
                     renderVideoSources();
                     renderThumbnailGallery();
+
+                    // Pre-populate saved meta from DB
+                    if (publishData.saved_meta) {
+                        const meta = publishData.saved_meta;
+                        if (meta.youtube_video_title) {
+                            document.getElementById('publishTitle').value = meta.youtube_video_title;
+                        }
+                        if (meta.youtube_video_description) {
+                            document.getElementById('publishDescription').value = meta.youtube_video_description;
+                        }
+                        if (meta.youtube_video_tags) {
+                            document.getElementById('publishTags').value = meta.youtube_video_tags;
+                        }
+                        if (meta.youtube_playlist_title) {
+                            document.getElementById('playlistName').value = meta.youtube_playlist_title;
+                        }
+                        // If there's an existing playlist saved, pre-select "existing" radio
+                        if (meta.youtube_playlist_id) {
+                            savedPlaylistId = meta.youtube_playlist_id;
+                            savedPlaylistTitle = meta.youtube_playlist_title;
+                        }
+                    }
+
+                    // Load saved chapter meta into playlistChildMeta
+                    if (publishData.videos) {
+                        const chaptersWithMeta = publishData.videos.filter(v => v.youtube_video_title);
+                        if (chaptersWithMeta.length > 0) {
+                            playlistChildMeta = chaptersWithMeta.map(v => ({
+                                id: v.id,
+                                source_label: v.label,
+                                title: v.youtube_video_title,
+                                description: v.youtube_video_description || '',
+                                uploaded: !!v.youtube_video_id,
+                            }));
+                        }
+                    }
+
+                    // Load publishing history
+                    loadPublishHistory();
                 } catch (e) {
                     document.getElementById('publishVideoSources').innerHTML =
                         `<p class="text-sm text-red-500">Lỗi tải dữ liệu: ${e.message}</p>`;
@@ -6318,17 +6847,43 @@
                     return;
                 }
 
-                container.innerHTML = publishData.videos.map((v, i) => `
-                    <label class="flex items-center gap-3 p-2 rounded hover:bg-gray-50 cursor-pointer transition">
+                let html = '';
+
+                // Show warning if some chapters don't have videos
+                if (publishData.chapters_without_video && publishData.chapters_without_video.length > 0) {
+                    const missing = publishData.chapters_without_video;
+                    html += `<div class="mb-2 p-2 bg-yellow-50 border border-yellow-300 rounded-lg text-xs text-yellow-700">
+                        ⚠️ ${missing.length}/${publishData.total_chapters} chương chưa có video: Chương ${missing.join(', ')}.
+                        <br>Vui lòng chọn các chương này và nhấn "🎬 Tạo Video" ở tab Chapters trước khi phát hành.
+                    </div>`;
+                }
+
+                html += publishData.videos.map((v, i) => {
+                    const isUploaded = !!v.youtube_video_id;
+                    const uploadBadge = isUploaded ?
+                        `<span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">✅ Đã upload</span>` :
+                        `<span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Chưa upload</span>`;
+                    const uploadDate = v.youtube_uploaded_at ?
+                        `<span class="text-xs text-gray-400 ml-1">(${new Date(v.youtube_uploaded_at).toLocaleDateString('vi-VN')})</span>` :
+                        '';
+                    return `
+                    <label class="flex items-center gap-3 p-2 rounded hover:bg-gray-50 cursor-pointer transition ${isUploaded ? 'bg-green-50/50' : ''}">
                         <input type="checkbox" class="publish-video-checkbox rounded text-blue-600"
-                               value="${v.id}" data-type="${v.type}" data-path="${v.path}" data-label="${v.label}">
+                               value="${v.id}" data-type="${v.type}" data-path="${v.path}" data-label="${v.label}"
+                               data-uploaded="${isUploaded ? '1' : '0'}"
+                               data-yt-title="${v.youtube_video_title || ''}"
+                               data-yt-desc="${v.youtube_video_description || ''}">
                         <div class="flex-1">
                             <span class="text-sm font-medium text-gray-700">${v.label}</span>
-                            <span class="text-xs text-gray-400 ml-2">${v.duration ? v.duration + 's' : ''}</span>
+                            <span class="text-xs text-gray-400 ml-2">${v.duration ? Math.round(v.duration) + 's' : ''}</span>
+                            ${uploadDate}
                         </div>
+                        ${uploadBadge}
                         <span class="text-xs px-2 py-0.5 rounded-full ${v.type === 'description' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}">${v.type === 'description' ? 'Giới thiệu' : 'Chapter'}</span>
-                    </label>
-                `).join('');
+                    </label>`;
+                }).join('');
+
+                container.innerHTML = html;
 
                 // Update selection count
                 container.querySelectorAll('.publish-video-checkbox').forEach(cb => {
@@ -6336,13 +6891,26 @@
                 });
             }
 
+            // ---- Toggle Select All Video Sources ----
+            window.toggleSelectAllVideoSources = function() {
+                const checkboxes = document.querySelectorAll('.publish-video-checkbox');
+                const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                const btn = document.getElementById('selectAllVideoSourcesBtn');
+
+                checkboxes.forEach(cb => cb.checked = !allChecked);
+                btn.textContent = allChecked ? '☑️ Chọn tất cả' : '☐ Bỏ chọn tất cả';
+                updateSourceSelection();
+            };
+
             function updateSourceSelection() {
                 const mode = document.querySelector('input[name="publishMode"]:checked').value;
                 const checked = document.querySelectorAll('.publish-video-checkbox:checked');
                 const hint = document.getElementById('publishSourceHint');
 
                 if (mode === 'playlist') {
-                    hint.textContent = `Đã chọn ${checked.length} video cho playlist`;
+                    const newCount = [...checked].filter(cb => cb.dataset.uploaded !== '1').length;
+                    const uploadedCount = checked.length - newCount;
+                    hint.textContent = `Đã chọn ${checked.length} video (${newCount} mới, ${uploadedCount} đã upload)`;
                 } else {
                     if (checked.length > 1) {
                         // For single/shorts, uncheck all except the last one
@@ -6500,9 +7068,23 @@
                     btn.disabled = true;
                     btn.textContent = '⏳ AI đang xử lý...';
 
-                    const checkedVideos = [...document.querySelectorAll('.publish-video-checkbox:checked')];
+                    const playlistType = document.querySelector('input[name="playlistType"]:checked')
+                        ?.value || 'new';
+                    let checkedVideos = [...document.querySelectorAll('.publish-video-checkbox:checked')];
+
+                    // When using existing playlist, only generate for non-uploaded videos
+                    if (playlistType === 'existing') {
+                        checkedVideos = checkedVideos.filter(cb => cb.dataset.uploaded !== '1');
+                        if (checkedVideos.length === 0) {
+                            alert('Tất cả video đã chọn đều đã được upload. Không cần tạo phiên bản con.');
+                            btn.disabled = false;
+                            btn.textContent = origText;
+                            return;
+                        }
+                    }
+
                     if (checkedVideos.length < 2) {
-                        alert('Vui lòng chọn ít nhất 2 video để tạo playlist.');
+                        alert('Vui lòng chọn ít nhất 2 video chưa upload để tạo phiên bản con.');
                         btn.disabled = false;
                         btn.textContent = origText;
                         return;
@@ -6532,7 +7114,13 @@
                         const result = await safeJson(resp);
 
                         if (result.items && result.items.length) {
-                            playlistChildMeta = result.items;
+                            // Merge with existing uploaded items
+                            const uploadedItems = playlistChildMeta.filter(m => m.uploaded);
+                            const newItems = result.items.map(item => ({
+                                ...item,
+                                uploaded: false,
+                            }));
+                            playlistChildMeta = [...uploadedItems, ...newItems];
                             renderPlaylistMeta();
                         }
                     } catch (e) {
@@ -6544,6 +7132,101 @@
                 });
             }
 
+            // ---- Playlist Type Toggle (New vs Existing) ----
+            function setupPlaylistTypeToggle() {
+                document.querySelectorAll('.playlist-type-radio').forEach(radio => {
+                    radio.addEventListener('change', function() {
+                        const type = this.value;
+                        const newSection = document.getElementById('newPlaylistSection');
+                        const existSection = document.getElementById('existingPlaylistSection');
+
+                        document.querySelectorAll('.playlist-type-label').forEach(l => {
+                            l.classList.remove('bg-indigo-50', 'border-indigo-400');
+                        });
+                        this.closest('.playlist-type-label').classList.add('bg-indigo-50',
+                            'border-indigo-400');
+
+                        if (type === 'existing') {
+                            newSection.classList.add('hidden');
+                            existSection.classList.remove('hidden');
+                            loadExistingPlaylists();
+                            // Update hint
+                            document.getElementById('playlistMetaHint').textContent =
+                                'Chỉ tạo tiêu đề/mô tả cho video chưa upload. Video đã upload sẽ giữ nguyên.';
+                        } else {
+                            newSection.classList.remove('hidden');
+                            existSection.classList.add('hidden');
+                            document.getElementById('playlistMetaHint').textContent =
+                                'AI sẽ chuyển tiêu đề và mô tả chung thành phiên bản riêng cho từng chapter video trong playlist.';
+                        }
+                    });
+                });
+
+                // Set initial active style
+                const initialLabel = document.querySelector('.playlist-type-radio:checked')?.closest(
+                    '.playlist-type-label');
+                if (initialLabel) initialLabel.classList.add('bg-indigo-50', 'border-indigo-400');
+
+                // Refresh playlists button
+                document.getElementById('refreshPlaylistsBtn').addEventListener('click', () => {
+                    loadExistingPlaylists(true);
+                });
+            }
+
+            // ---- Load Existing Playlists from YouTube ----
+            async function loadExistingPlaylists(force = false) {
+                if (existingPlaylists.length > 0 && !force) {
+                    renderExistingPlaylists();
+                    return;
+                }
+
+                const select = document.getElementById('existingPlaylistSelect');
+                select.innerHTML = '<option value="">⏳ Đang tải...</option>';
+
+                try {
+                    const resp = await fetch(`${publishBaseUrl}/playlists`, {
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    const result = await safeJson(resp);
+
+                    if (result.playlists) {
+                        existingPlaylists = result.playlists;
+                        renderExistingPlaylists();
+                    }
+                } catch (e) {
+                    select.innerHTML = `<option value="">❌ Lỗi: ${e.message}</option>`;
+                }
+            }
+
+            function renderExistingPlaylists() {
+                const select = document.getElementById('existingPlaylistSelect');
+                const hint = document.getElementById('existingPlaylistHint');
+
+                if (existingPlaylists.length === 0) {
+                    select.innerHTML = '<option value="">Không có playlist nào. Hãy tạo mới.</option>';
+                    hint.textContent = '';
+                    return;
+                }
+
+                let html = '<option value="">-- Chọn playlist --</option>';
+                existingPlaylists.forEach(pl => {
+                    const selected = savedPlaylistId === pl.id ? 'selected' : '';
+                    html +=
+                        `<option value="${pl.id}" data-title="${pl.title}" ${selected}>${pl.title} (${pl.video_count} video)</option>`;
+                });
+                select.innerHTML = html;
+
+                if (savedPlaylistId) {
+                    hint.textContent = `Playlist đã lưu: ${savedPlaylistTitle || savedPlaylistId}`;
+                    hint.className = 'text-xs text-green-600 mt-1 font-medium';
+                } else {
+                    hint.textContent = `${existingPlaylists.length} playlist tìm thấy trên kênh.`;
+                    hint.className = 'text-xs text-gray-400 mt-1';
+                }
+            }
+
             // ---- Render Playlist Child Meta ----
             function renderPlaylistMeta() {
                 const container = document.getElementById('playlistMetaList');
@@ -6552,30 +7235,187 @@
                     return;
                 }
 
-                container.innerHTML = playlistChildMeta.map((item, i) => `
-                    <div class="p-3 border rounded-lg bg-gray-50">
+                container.innerHTML = playlistChildMeta.map((item, i) => {
+                    const isUploaded = item.uploaded;
+                    const statusBadge = isUploaded ?
+                        '<span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">✅ Đã upload</span>' :
+                        '<span class="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Chưa upload</span>';
+                    const readonly = isUploaded ? 'readonly' : '';
+                    const bgClass = isUploaded ? 'bg-green-50 border-green-200' : 'bg-gray-50';
+
+                    return `
+                    <div class="p-3 border rounded-lg ${bgClass}">
                         <div class="flex items-center gap-2 mb-2">
                             <span class="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">#${i+1}</span>
                             <span class="text-xs text-gray-500">${item.source_label || ''}</span>
+                            ${statusBadge}
                         </div>
-                        <input type="text" class="w-full border-gray-300 rounded text-sm mb-1 playlist-child-title"
-                               data-index="${i}" value="${item.title}" placeholder="Tiêu đề video ${i+1}">
-                        <textarea rows="2" class="w-full border-gray-300 rounded text-sm playlist-child-desc"
-                                  data-index="${i}" placeholder="Mô tả video ${i+1}">${item.description}</textarea>
-                    </div>
-                `).join('');
+                        <input type="text" class="w-full border-gray-300 rounded text-sm mb-1 playlist-child-title ${isUploaded ? 'bg-gray-100 cursor-not-allowed' : ''}"
+                               data-index="${i}" value="${item.title}" placeholder="Tiêu đề video ${i+1}" ${readonly}>
+                        <textarea rows="2" class="w-full border-gray-300 rounded text-sm playlist-child-desc ${isUploaded ? 'bg-gray-100 cursor-not-allowed' : ''}"
+                                  data-index="${i}" placeholder="Mô tả video ${i+1}" ${readonly}>${item.description}</textarea>
+                    </div>`;
+                }).join('');
 
-                // Listen for edits
-                container.querySelectorAll('.playlist-child-title').forEach(input => {
+                // Listen for edits (only on non-uploaded items)
+                container.querySelectorAll('.playlist-child-title:not([readonly])').forEach(input => {
                     input.addEventListener('input', function() {
                         playlistChildMeta[parseInt(this.dataset.index)].title = this.value;
                     });
                 });
-                container.querySelectorAll('.playlist-child-desc').forEach(ta => {
+                container.querySelectorAll('.playlist-child-desc:not([readonly])').forEach(ta => {
                     ta.addEventListener('input', function() {
                         playlistChildMeta[parseInt(this.dataset.index)].description = this.value;
                     });
                 });
+            }
+
+            // ---- Save Meta Button ----
+            function setupSaveMetaButton() {
+                document.getElementById('savePublishMetaBtn').addEventListener('click', async function() {
+                    const btn = this;
+                    const origText = btn.textContent;
+                    btn.disabled = true;
+                    btn.textContent = '⏳ Đang lưu...';
+
+                    try {
+                        // Collect chapter meta
+                        const chapters = [];
+                        const childTitles = document.querySelectorAll(
+                            '.playlist-child-title:not([readonly])');
+                        const childDescs = document.querySelectorAll(
+                        '.playlist-child-desc:not([readonly])');
+                        playlistChildMeta.forEach((item, i) => {
+                            if (!item.uploaded) {
+                                chapters.push({
+                                    id: item.id,
+                                    title: item.title,
+                                    description: item.description,
+                                });
+                            }
+                        });
+
+                        const playlistType = document.querySelector('input[name="playlistType"]:checked')
+                            ?.value || 'new';
+                        let playlistTitle = '';
+                        if (playlistType === 'new') {
+                            playlistTitle = document.getElementById('playlistName').value;
+                        } else {
+                            const select = document.getElementById('existingPlaylistSelect');
+                            const option = select.options[select.selectedIndex];
+                            playlistTitle = option ? option.dataset.title || option.text : '';
+                        }
+
+                        const resp = await fetch(`${publishBaseUrl}/save-meta`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': csrfToken,
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                title: document.getElementById('publishTitle').value,
+                                description: document.getElementById('publishDescription')
+                                    .value,
+                                tags: document.getElementById('publishTags').value,
+                                playlist_title: playlistTitle,
+                                chapters: chapters,
+                            })
+                        });
+                        const result = await safeJson(resp);
+
+                        if (result.success) {
+                            btn.textContent = '✅ Đã lưu!';
+                            setTimeout(() => {
+                                btn.textContent = origText;
+                            }, 2000);
+                        } else {
+                            alert('Lỗi: ' + (result.error || 'Không thể lưu'));
+                        }
+                    } catch (e) {
+                        alert('Lỗi: ' + e.message);
+                    } finally {
+                        btn.disabled = false;
+                        setTimeout(() => {
+                            if (btn.textContent === '⏳ Đang lưu...') btn.textContent = origText;
+                        }, 3000);
+                    }
+                });
+
+                // Refresh history button
+                document.getElementById('refreshHistoryBtn').addEventListener('click', () => {
+                    loadPublishHistory();
+                });
+            }
+
+            // ---- Load Publishing History ----
+            async function loadPublishHistory() {
+                const container = document.getElementById('publishHistoryContainer');
+                container.innerHTML = '<p class="text-sm text-gray-400">Đang tải lịch sử...</p>';
+
+                try {
+                    const resp = await fetch(`${publishBaseUrl}/history`, {
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    const result = await safeJson(resp);
+
+                    if (!result.history || result.history.length === 0) {
+                        let html =
+                            '<p class="text-sm text-gray-400 italic">Chưa có video nào được phát hành lên YouTube.</p>';
+                        if (result.playlist && result.playlist.id) {
+                            html = `<div class="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <p class="text-sm font-medium text-blue-800">📋 Playlist: ${result.playlist.title || result.playlist.id}</p>
+                                <a href="${result.playlist.url}" target="_blank" class="text-xs text-blue-600 hover:underline">Xem trên YouTube</a>
+                            </div>` + html;
+                        }
+                        container.innerHTML = html;
+                        return;
+                    }
+
+                    let html = '';
+
+                    // Playlist info
+                    if (result.playlist && result.playlist.id) {
+                        html += `<div class="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p class="text-sm font-medium text-blue-800">📋 Playlist: ${result.playlist.title || result.playlist.id}</p>
+                            <a href="${result.playlist.url}" target="_blank" class="text-xs text-blue-600 hover:underline">Xem trên YouTube</a>
+                            <span class="text-xs text-gray-500 ml-2">| ${result.total_uploaded} video đã upload</span>
+                        </div>`;
+                    }
+
+                    // History table
+                    html += `<div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b bg-gray-50">
+                                    <th class="text-left p-2 text-xs font-semibold text-gray-600">STT</th>
+                                    <th class="text-left p-2 text-xs font-semibold text-gray-600">Chương</th>
+                                    <th class="text-left p-2 text-xs font-semibold text-gray-600">Tiêu đề YouTube</th>
+                                    <th class="text-left p-2 text-xs font-semibold text-gray-600">Video ID</th>
+                                    <th class="text-left p-2 text-xs font-semibold text-gray-600">Ngày upload</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+
+                    result.history.forEach((h, i) => {
+                        const date = h.uploaded_at ? new Date(h.uploaded_at).toLocaleString('vi-VN') :
+                        'N/A';
+                        html += `<tr class="border-b hover:bg-gray-50">
+                            <td class="p-2 text-gray-500">${i + 1}</td>
+                            <td class="p-2 font-medium text-gray-700">Ch.${h.chapter_number}: ${h.chapter_title}</td>
+                            <td class="p-2 text-gray-600">${h.youtube_video_title || '-'}</td>
+                            <td class="p-2"><a href="${h.youtube_video_url}" target="_blank" class="text-blue-600 hover:underline text-xs">${h.youtube_video_id}</a></td>
+                            <td class="p-2 text-gray-500 text-xs">${date}</td>
+                        </tr>`;
+                    });
+
+                    html += '</tbody></table></div>';
+                    container.innerHTML = html;
+                } catch (e) {
+                    container.innerHTML = `<p class="text-sm text-red-500">Lỗi tải lịch sử: ${e.message}</p>`;
+                }
             }
 
             // ---- Publish Button ----
@@ -6617,43 +7457,113 @@
 
                     try {
                         if (mode === 'playlist') {
+                            const playlistType = document.querySelector(
+                                'input[name="playlistType"]:checked')?.value || 'new';
+
                             // Collect child meta from the editable fields
                             const childTitles = document.querySelectorAll('.playlist-child-title');
                             const childDescs = document.querySelectorAll('.playlist-child-desc');
-                            const items = checkedVideos.map((cb, i) => ({
-                                video_id: cb.value,
-                                video_type: cb.dataset.type,
-                                title: childTitles[i] ? childTitles[i].value : title,
-                                description: childDescs[i] ? childDescs[i].value : '',
-                            }));
 
-                            progressText.textContent = 'Đang tạo playlist và upload video...';
-                            progressBar.style.width = '10%';
+                            if (playlistType === 'existing') {
+                                // ---- Add to Existing Playlist ----
+                                const existingPlaylistId = document.getElementById('existingPlaylistSelect')
+                                    .value;
+                                if (!existingPlaylistId) {
+                                    alert('Vui lòng chọn một playlist có sẵn.');
+                                    btn.disabled = false;
+                                    progressEl.classList.add('hidden');
+                                    return;
+                                }
 
-                            const resp = await fetch(`${publishBaseUrl}/create-playlist`, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-CSRF-TOKEN': csrfToken,
-                                    'Accept': 'application/json'
-                                },
-                                body: JSON.stringify({
-                                    playlist_name: document.getElementById('playlistName')
-                                        .value || title,
-                                    playlist_description: document.getElementById(
-                                        'publishDescription').value,
-                                    privacy: document.getElementById('publishPrivacy')
-                                        .value,
-                                    thumbnail_path: selectedThumbnailUrl,
-                                    tags: document.getElementById('publishTags').value,
-                                    items: items
-                                })
-                            });
-                            const result = await safeJson(resp);
-                            progressBar.style.width = '100%';
-                            progressText.textContent = 'Hoàn tất!';
+                                // Only upload non-uploaded videos
+                                const newVideos = checkedVideos.filter(cb => cb.dataset.uploaded !== '1');
+                                if (newVideos.length === 0) {
+                                    alert(
+                                        'Tất cả video đã chọn đều đã được upload. Không có video mới để upload.');
+                                    btn.disabled = false;
+                                    progressEl.classList.add('hidden');
+                                    return;
+                                }
 
-                            showPublishResult(result);
+                                const items = newVideos.map((cb, i) => {
+                                    // Find matching child meta
+                                    const metaItem = playlistChildMeta.find(m => m.id === cb.value);
+                                    return {
+                                        video_id: cb.value,
+                                        video_type: cb.dataset.type,
+                                        title: metaItem ? metaItem.title : title,
+                                        description: metaItem ? metaItem.description : '',
+                                    };
+                                });
+
+                                const selectEl = document.getElementById('existingPlaylistSelect');
+                                const selectedOption = selectEl.options[selectEl.selectedIndex];
+                                const playlistTitle = selectedOption ? selectedOption.dataset.title : '';
+
+                                progressText.textContent =
+                                    `Đang upload ${newVideos.length} video vào playlist có sẵn...`;
+                                progressBar.style.width = '10%';
+
+                                const resp = await fetch(`${publishBaseUrl}/add-to-playlist`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-CSRF-TOKEN': csrfToken,
+                                        'Accept': 'application/json'
+                                    },
+                                    body: JSON.stringify({
+                                        playlist_id: existingPlaylistId,
+                                        playlist_title: playlistTitle,
+                                        privacy: document.getElementById('publishPrivacy')
+                                            .value,
+                                        thumbnail_path: selectedThumbnailUrl,
+                                        tags: document.getElementById('publishTags').value,
+                                        items: items
+                                    })
+                                });
+                                const result = await safeJson(resp);
+                                progressBar.style.width = '100%';
+                                progressText.textContent = 'Hoàn tất!';
+
+                                showPublishResult(result);
+                            } else {
+                                // ---- Create New Playlist ----
+                                const items = checkedVideos.map((cb, i) => ({
+                                    video_id: cb.value,
+                                    video_type: cb.dataset.type,
+                                    title: childTitles[i] ? childTitles[i].value : title,
+                                    description: childDescs[i] ? childDescs[i].value : '',
+                                }));
+
+                                progressText.textContent = 'Đang tạo playlist và upload video...';
+                                progressBar.style.width = '10%';
+
+                                const resp = await fetch(`${publishBaseUrl}/create-playlist`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-CSRF-TOKEN': csrfToken,
+                                        'Accept': 'application/json'
+                                    },
+                                    body: JSON.stringify({
+                                        playlist_name: document.getElementById(
+                                                'playlistName')
+                                            .value || title,
+                                        playlist_description: document.getElementById(
+                                            'publishDescription').value,
+                                        privacy: document.getElementById('publishPrivacy')
+                                            .value,
+                                        thumbnail_path: selectedThumbnailUrl,
+                                        tags: document.getElementById('publishTags').value,
+                                        items: items
+                                    })
+                                });
+                                const result = await safeJson(resp);
+                                progressBar.style.width = '100%';
+                                progressText.textContent = 'Hoàn tất!';
+
+                                showPublishResult(result);
+                            }
                         } else {
                             // Single video or Shorts
                             const cb = checkedVideos[0];
@@ -6695,6 +7605,13 @@
                     } finally {
                         btn.disabled = false;
                         setTimeout(() => progressEl.classList.add('hidden'), 3000);
+                        // Reload data to update upload statuses
+                        setTimeout(() => {
+                            publishInitialized = false;
+                            publishData = null;
+                            playlistChildMeta = [];
+                            loadPublishData();
+                        }, 2000);
                     }
                 });
             }
@@ -6715,6 +7632,10 @@
                             `<p class="text-sm"><a href="${result.video_url}" target="_blank" class="text-blue-600 hover:underline">🔗 Xem Video trên YouTube</a></p>`;
                     }
 
+                    if (result.thumbnail_warning) {
+                        html += `<p class="text-yellow-600 text-sm mt-2">⚠️ ${result.thumbnail_warning}</p>`;
+                    }
+
                     if (result.uploaded_videos && result.uploaded_videos.length) {
                         html += '<div class="mt-2 space-y-1">';
                         result.uploaded_videos.forEach((v, i) => {
@@ -6726,6 +7647,9 @@
 
                     html += '</div>';
                     el.innerHTML = html;
+
+                    // Refresh history after successful publish
+                    loadPublishHistory();
                 } else {
                     el.innerHTML =
                         `<div class="p-3 bg-red-50 border border-red-300 rounded-lg text-red-700">❌ ${result.error || 'Có lỗi xảy ra'}</div>`;

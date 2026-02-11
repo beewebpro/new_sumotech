@@ -2,7 +2,20 @@
   "permissions": {
     "allow": [
       "Bash(php artisan route:list:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(systemctl list-units:*)",
+      "Bash(systemctl restart:*)",
+      "Bash(systemctl status:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(nvidia-smi:*)",
+      "Bash(lscpu:*)",
+      "Bash(chown:*)",
+      "WebFetch(domain:vietnamthuquan.eu)",
+      "Bash(curl:*)",
+      "Bash(echo:*)",
+      "Bash(crontab:*)",
+      "Bash(printf:*)",
+      "Bash(1 CRON crontab -l)"
     ]
   }
 }

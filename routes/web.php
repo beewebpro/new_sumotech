@@ -10,6 +10,7 @@ use App\Http\Controllers\YoutubeChannelContentController;
 use App\Http\Controllers\ApiUsageController;
 use App\Http\Controllers\AudioBookController;
 use App\Http\Controllers\AudioBookChapterController;
+use App\Http\Controllers\AutomationReportController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\App;
 
@@ -113,6 +114,11 @@ Route::post('/preview-voice', [DubSyncController::class, 'previewVoice'])->name(
 Route::get('/coqui-tts', [CoquiTtsController::class, 'index'])->name('coqui.tts.index');
 Route::post('/coqui-tts/generate', [CoquiTtsController::class, 'generate'])->name('coqui.tts.generate');
 
+// Automation Reports Routes
+Route::middleware('auth')->prefix('automation-reports')->name('automation-reports.')->group(function () {
+    Route::get('/', [AutomationReportController::class, 'index'])->name('index');
+});
+
 // AudioBooks CRUD Routes
 Route::middleware('auth')->prefix('audiobooks')->name('audiobooks.')->group(function () {
     Route::get('/', [AudioBookController::class, 'index'])->name('index');
@@ -132,6 +138,8 @@ Route::middleware('auth')->prefix('audiobooks')->name('audiobooks.')->group(func
     Route::post('{audioBook}/rewrite-description', [AudioBookController::class, 'rewriteDescription'])->name('rewrite.description');
     Route::post('{audioBook}/generate-description-audio', [AudioBookController::class, 'generateDescriptionAudio'])->name('generate.description.audio');
     Route::post('{audioBook}/generate-description-video', [AudioBookController::class, 'generateDescriptionVideo'])->name('generate.description.video');
+    Route::post('{audioBook}/generate-description-video-async', [AudioBookController::class, 'startDescriptionVideoJob'])->name('generate.description.video.async');
+    Route::get('{audioBook}/description-video-progress', [AudioBookController::class, 'getDescriptionVideoProgress'])->name('description.video.progress');
     Route::delete('{audioBook}/delete-description-audio', [AudioBookController::class, 'deleteDescriptionAudio'])->name('delete.description.audio');
     Route::delete('{audioBook}/delete-description-video', [AudioBookController::class, 'deleteDescriptionVideo'])->name('delete.description.video');
 
@@ -139,6 +147,7 @@ Route::middleware('auth')->prefix('audiobooks')->name('audiobooks.')->group(func
     Route::get('{audioBook}/media', [AudioBookController::class, 'getMedia'])->name('media.index');
     Route::post('{audioBook}/media/generate-thumbnail', [AudioBookController::class, 'generateThumbnail'])->name('media.generate.thumbnail');
     Route::post('{audioBook}/media/add-text-overlay', [AudioBookController::class, 'addTextOverlay'])->name('media.add.text.overlay');
+    Route::post('{audioBook}/media/add-logo-overlay', [AudioBookController::class, 'addLogoOverlay'])->name('media.add.logo.overlay');
     Route::post('{audioBook}/media/generate-scenes', [AudioBookController::class, 'generateVideoScenes'])->name('media.generate.scenes');
     Route::post('{audioBook}/media/analyze-scenes', [AudioBookController::class, 'analyzeScenes'])->name('media.analyze.scenes');
     Route::post('{audioBook}/media/generate-scene-image', [AudioBookController::class, 'generateSceneImage'])->name('media.generate.scene.image');
@@ -185,12 +194,19 @@ Route::middleware('auth')->prefix('audiobooks')->name('audiobooks.')->group(func
     // Scrape chapters from book URL
     Route::post('scrape-chapters', [AudioBookController::class, 'scrapeChapters'])->name('scrape.chapters');
 
+    // Fetch book metadata from URL (for create page auto-fill)
+    Route::post('fetch-book-metadata', [AudioBookController::class, 'fetchBookMetadata'])->name('fetch.book.metadata');
+
     // Auto Publish to YouTube Routes
     Route::get('{audioBook}/publish/data', [AudioBookController::class, 'getPublishData'])->name('publish.data');
+    Route::get('{audioBook}/publish/playlists', [AudioBookController::class, 'getYoutubePlaylists'])->name('publish.playlists');
     Route::post('{audioBook}/publish/generate-meta', [AudioBookController::class, 'generateVideoMeta'])->name('publish.generate.meta');
     Route::post('{audioBook}/publish/generate-playlist-meta', [AudioBookController::class, 'generatePlaylistMeta'])->name('publish.generate.playlist.meta');
     Route::post('{audioBook}/publish/upload', [AudioBookController::class, 'uploadToYoutube'])->name('publish.upload');
     Route::post('{audioBook}/publish/create-playlist', [AudioBookController::class, 'createPlaylistAndUpload'])->name('publish.create.playlist');
+    Route::post('{audioBook}/publish/add-to-playlist', [AudioBookController::class, 'addToExistingPlaylist'])->name('publish.add.to.playlist');
+    Route::post('{audioBook}/publish/save-meta', [AudioBookController::class, 'savePublishMeta'])->name('publish.save.meta');
+    Route::get('{audioBook}/publish/history', [AudioBookController::class, 'getPublishHistory'])->name('publish.history');
 });
 
 // Projects CRUD Routes

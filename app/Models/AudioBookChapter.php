@@ -24,7 +24,11 @@ class AudioBookChapter extends Model
         'total_duration',
         'audio_file',
         'status',
-        'error_message'
+        'error_message',
+        'youtube_video_id',
+        'youtube_video_title',
+        'youtube_video_description',
+        'youtube_uploaded_at'
     ];
 
     protected $casts = [

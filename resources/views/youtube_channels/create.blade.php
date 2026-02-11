@@ -19,15 +19,24 @@
                             @csrf
                             @include('youtube_channels._form')
 
-                            <div class="mt-6 flex items-center gap-3">
-                                <button type="submit"
-                                    class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-6 rounded-lg transition duration-200">
-                                    Save
-                                </button>
-                                <a href="{{ route('youtube-channels.index') }}"
-                                    class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 px-6 rounded-lg transition duration-200">
-                                    Cancel
-                                </a>
+                            {{-- Create Button --}}
+                            <div class="mt-8 pt-6 border-t border-gray-200">
+                                <div class="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-200">
+                                    <div>
+                                        <p class="text-sm font-semibold text-green-900">✅ Tạo kênh YouTube mới</p>
+                                        <p class="text-xs text-green-700">Nhấn "Create Channel" để lưu thông tin kênh</p>
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <a href="{{ route('youtube-channels.index') }}"
+                                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 px-6 rounded-lg transition duration-200">
+                                            Cancel
+                                        </a>
+                                        <button type="submit"
+                                            class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg transition duration-200 shadow-md">
+                                            ✅ Create Channel
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </form>
                     </div>

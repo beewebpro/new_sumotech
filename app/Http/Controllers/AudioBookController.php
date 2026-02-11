@@ -8,6 +8,7 @@ use App\Models\ChannelSpeaker;
 use App\Models\YoutubeChannel;
 use App\Services\BookScrapers\Docsach24Scraper;
 use App\Services\BookScrapers\NhaSachMienPhiScraper;
+use App\Services\BookScrapers\VietNamThuQuanScraper;
 use App\Services\TTSService;
 use App\Services\GeminiImageService;
 use App\Services\KlingAIService;
@@ -59,17 +60,22 @@ class AudioBookController extends Controller
             'docsach24' => [
                 'label' => 'docsach24.co',
                 'domains' => ['docsach24.co', 'www.docsach24.co']
+            ],
+            'vietnamthuquan' => [
+                'label' => 'vietnamthuquan.eu',
+                'domains' => ['vietnamthuquan.eu', 'www.vietnamthuquan.eu', 'vnthuquan.net', 'www.vnthuquan.net']
             ]
         ];
     }
 
     /**
      * Display a listing of the resource.
+     * Redirect to YouTube channels page since audiobooks are organized by channel.
      */
     public function index()
     {
-        $audioBooks = AudioBook::with('youtubeChannel')->paginate(15);
-        return view('audiobooks.index', compact('audioBooks'));
+        return redirect()->route('youtube-channels.index')
+            ->with('info', 'Sách audio được tổ chức theo kênh YouTube. Vui lòng chọn kênh để xem danh sách sách.');
     }
 
     /**
@@ -93,7 +99,9 @@ class AudioBookController extends Controller
             ->orderBy('category')
             ->pluck('category');
 
-        return view('audiobooks.create', compact('youtubeChannels', 'authorBooks', 'categoryOptions'));
+        $scrapeSources = $this->getScrapeSources();
+
+        return view('audiobooks.create', compact('youtubeChannels', 'authorBooks', 'categoryOptions', 'scrapeSources'));
     }
 
     /**
@@ -111,7 +119,10 @@ class AudioBookController extends Controller
             'category_custom' => 'nullable|string|max:255',
             'description' => 'nullable|string',
             'cover_image' => 'nullable|image|max:2048',
-            'language' => 'required|string|in:vi,en,es,fr,de,ja,ko'
+            'cover_image_url' => 'nullable|url',
+            'language' => 'required|string|in:vi,en,es,fr,de,ja,ko',
+            'book_url' => 'nullable|url',
+            'book_source' => 'nullable|string'
         ]);
 
         if (($data['book_type'] ?? '') === 'custom') {
@@ -126,12 +137,84 @@ class AudioBookController extends Controller
             $data['book_type'] = 'sach';
         }
 
+        // Handle cover image - prioritize file upload, then URL
         if ($request->hasFile('cover_image')) {
             $path = $request->file('cover_image')->store('audiobooks', 'public');
             $data['cover_image'] = $path;
+        } elseif (!empty($data['cover_image_url'])) {
+            // Download image from URL
+            try {
+                $imageUrl = $data['cover_image_url'];
+                $imageContent = Http::timeout(30)->get($imageUrl)->body();
+
+                // Generate filename from URL
+                $extension = pathinfo(parse_url($imageUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+                $filename = 'audiobooks/' . uniqid() . '.' . $extension;
+
+                Storage::disk('public')->put($filename, $imageContent);
+                $data['cover_image'] = $filename;
+            } catch (\Exception $e) {
+                // If download fails, just log it and continue
+                Log::warning('Failed to download cover image: ' . $e->getMessage());
+            }
         }
 
+        // Remove temporary fields from data before creating audiobook
+        $bookUrl = $data['book_url'] ?? null;
+        $bookSource = $data['book_source'] ?? null;
+        unset($data['book_url'], $data['book_source'], $data['cover_image_url']);
+
         $audioBook = AudioBook::create($data);
+
+        // Automatically scrape chapters if URL is provided
+        if ($bookUrl && $bookSource) {
+            try {
+                // Use appropriate scraper
+                switch ($bookSource) {
+                    case 'docsach24':
+                        $scraper = new Docsach24Scraper($bookUrl);
+                        break;
+                    case 'nhasachmienphi':
+                    default:
+                        $scraper = new NhaSachMienPhiScraper($bookUrl);
+                        break;
+                }
+
+                $result = $scraper->scrape();
+
+                if (isset($result['success']) && $result['success']) {
+                    // Update total chapters
+                    $audioBook->update(['total_chapters' => count($result['chapters'])]);
+
+                    // Import chapters
+                    $chapterNumber = 1;
+                    foreach ($result['chapters'] as $chapter) {
+                        $content = $scraper->scrapeChapterContent($chapter['url']);
+                        if ($content) {
+                            AudioBookChapter::create([
+                                'audio_book_id' => $audioBook->id,
+                                'chapter_number' => $chapterNumber,
+                                'title' => $chapter['title'],
+                                'content' => $content,
+                                'tts_voice' => $audioBook->language == 'vi' ? 'vi-VN-HoaiMyNeural' : 'en-US-AriaNeural',
+                                'tts_speed' => 1.0,
+                                'status' => 'pending'
+                            ]);
+                            $chapterNumber++;
+                        }
+                    }
+
+                    $importedCount = $chapterNumber - 1;
+                    return redirect()->route('audiobooks.show', $audioBook)
+                        ->with('success', "Đã tạo sách thành công và import {$importedCount} chương!");
+                }
+            } catch (\Exception $e) {
+                // If scraping fails, still redirect to show page but with warning
+                return redirect()->route('audiobooks.show', $audioBook)
+                    ->with('warning', 'Đã tạo sách thành công nhưng không thể tự động import chương. Lỗi: ' . $e->getMessage());
+            }
+        }
+
         return redirect()->route('audiobooks.show', $audioBook)->with('success', 'Sách âm thanh đã được tạo');
     }
 
@@ -226,8 +309,17 @@ class AudioBookController extends Controller
      */
     public function destroy(AudioBook $audioBook)
     {
+        $channelId = $audioBook->youtube_channel_id;
         $audioBook->delete();
-        return redirect()->route('audiobooks.index')->with('success', 'Sách âm thanh đã bị xóa');
+
+        // Redirect back to the channel page if exists, otherwise to channels list
+        if ($channelId) {
+            return redirect()->route('youtube-channels.show', $channelId)
+                ->with('success', 'Đã xóa sách thành công');
+        }
+
+        return redirect()->route('youtube-channels.index')
+            ->with('success', 'Đã xóa sách thành công');
     }
 
     /**
@@ -260,6 +352,9 @@ class AudioBookController extends Controller
             switch ($bookSource) {
                 case 'docsach24':
                     $scraper = new Docsach24Scraper($bookUrl);
+                    break;
+                case 'vietnamthuquan':
+                    $scraper = new VietNamThuQuanScraper($bookUrl);
                     break;
                 case 'nhasachmienphi':
                 default:
@@ -366,6 +461,79 @@ class AudioBookController extends Controller
     }
 
     /**
+     * Fetch book metadata from URL (for create page auto-fill)
+     */
+    public function fetchBookMetadata(Request $request)
+    {
+        $request->validate([
+            'book_url' => 'required|url'
+        ]);
+
+        $bookUrl = $request->input('book_url');
+        $scrapeSources = $this->getScrapeSources();
+
+        // Detect which source the URL belongs to
+        $host = parse_url($bookUrl, PHP_URL_HOST);
+        if (!$host) {
+            return response()->json(['error' => 'URL không hợp lệ'], 400);
+        }
+
+        $bookSource = null;
+        foreach ($scrapeSources as $source => $config) {
+            if (in_array($host, $config['domains'], true)) {
+                $bookSource = $source;
+                break;
+            }
+        }
+
+        if (!$bookSource) {
+            $supportedDomains = [];
+            foreach ($scrapeSources as $config) {
+                $supportedDomains = array_merge($supportedDomains, $config['domains']);
+            }
+            return response()->json([
+                'error' => 'URL không thuộc nguồn được hỗ trợ. Chỉ hỗ trợ: ' . implode(', ', $supportedDomains)
+            ], 400);
+        }
+
+        try {
+            // Use appropriate scraper based on detected source
+            switch ($bookSource) {
+                case 'docsach24':
+                    $scraper = new Docsach24Scraper($bookUrl);
+                    break;
+                case 'vietnamthuquan':
+                    $scraper = new VietNamThuQuanScraper($bookUrl);
+                    break;
+                case 'nhasachmienphi':
+                default:
+                    $scraper = new NhaSachMienPhiScraper($bookUrl);
+                    break;
+            }
+
+            $result = $scraper->scrape();
+
+            if (isset($result['error'])) {
+                return response()->json($result, 400);
+            }
+
+            // Return book metadata for form auto-fill
+            return response()->json([
+                'success' => true,
+                'title' => $result['title'] ?? '',
+                'author' => $result['author'] ?? '',
+                'category' => $result['category'] ?? '',
+                'description' => $result['description'] ?? '',
+                'cover_image' => $result['cover_image'] ?? '',
+                'total_chapters' => $result['total_chapters'] ?? 0,
+                'book_source' => $bookSource
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Lỗi khi lấy thông tin sách: ' . $e->getMessage()], 400);
+        }
+    }
+
+    /**
      * Update TTS settings for audiobook
      */
     public function updateTtsSettings(Request $request, AudioBook $audioBook)
@@ -374,7 +542,9 @@ class AudioBookController extends Controller
             'tts_provider' => 'nullable|string|in:openai,gemini,microsoft,vbee',
             'tts_voice_gender' => 'nullable|string|in:male,female',
             'tts_voice_name' => 'nullable|string|max:100',
-            'tts_style_instruction' => 'nullable|string|max:1000'
+            'tts_style_instruction' => 'nullable|string|max:1000',
+            'tts_speed' => 'nullable|numeric|between:0.5,2.0',
+            'pause_between_chunks' => 'nullable|numeric|between:0,5'
         ]);
 
         $audioBook->update($data);
@@ -1851,6 +2021,166 @@ class AudioBookController extends Controller
     }
 
     /**
+     * Add logo overlay to existing image using FFmpeg
+     */
+    public function addLogoOverlay(Request $request, AudioBook $audioBook)
+    {
+        $request->validate([
+            'source_image' => 'required|string',
+            'position' => 'required|string|in:top-left,top-right,bottom-left,bottom-right,center',
+            'logo_scale' => 'nullable|integer|min:5|max:50',
+            'opacity' => 'nullable|integer|min:0|max:100',
+            'margin' => 'nullable|integer|min:0|max:200',
+        ]);
+
+        // Get channel logo
+        $channel = $audioBook->youtubeChannel;
+        if (!$channel || !$channel->thumbnail_url) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Kênh YouTube chưa có logo/thumbnail. Vui lòng cập nhật logo cho kênh trước.'
+            ], 422);
+        }
+
+        $sourceImage = $request->input('source_image');
+        $position = $request->input('position', 'bottom-right');
+        $logoScale = $request->input('logo_scale', 15);
+        $opacity = $request->input('opacity', 100);
+        $margin = $request->input('margin', 20);
+
+        try {
+            // Resolve source image path
+            $sourceDir = storage_path('app/public/books/' . $audioBook->id);
+            $sourcePath = null;
+
+            if (file_exists($sourceDir . '/thumbnails/' . $sourceImage)) {
+                $sourcePath = $sourceDir . '/thumbnails/' . $sourceImage;
+            } elseif (file_exists($sourceDir . '/scenes/' . $sourceImage)) {
+                $sourcePath = $sourceDir . '/scenes/' . $sourceImage;
+            }
+
+            if (!$sourcePath) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Source image not found: ' . $sourceImage
+                ], 404);
+            }
+
+            // Resolve logo path
+            $logoPath = null;
+            $tempLogoPath = null;
+
+            if (str_starts_with($channel->thumbnail_url, 'http://') || str_starts_with($channel->thumbnail_url, 'https://')) {
+                // Download external logo to temp file
+                $logoContent = \Illuminate\Support\Facades\Http::timeout(15)->get($channel->thumbnail_url)->body();
+                $tempLogoPath = sys_get_temp_dir() . '/logo_' . $audioBook->id . '_' . time() . '.png';
+                file_put_contents($tempLogoPath, $logoContent);
+                $logoPath = $tempLogoPath;
+            } else {
+                $logoPath = storage_path('app/public/' . $channel->thumbnail_url);
+            }
+
+            if (!$logoPath || !file_exists($logoPath)) {
+                if ($tempLogoPath && file_exists($tempLogoPath)) {
+                    unlink($tempLogoPath);
+                }
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Logo file not found'
+                ], 404);
+            }
+
+            // Generate output filename
+            $timestamp = time();
+            $outputFilename = 'thumb_logo_' . $timestamp . '.png';
+            $outputDir = $sourceDir . '/thumbnails';
+            if (!is_dir($outputDir)) {
+                mkdir($outputDir, 0755, true);
+            }
+            $outputPath = $outputDir . '/' . $outputFilename;
+
+            // Build FFmpeg command for logo overlay
+            $ffmpegPath = env('FFMPEG_PATH', 'ffmpeg');
+            $scaleRatio = $logoScale / 100;
+            $opacityValue = $opacity / 100;
+
+            // Position mapping
+            switch ($position) {
+                case 'top-left':
+                    $overlayPos = "x={$margin}:y={$margin}";
+                    break;
+                case 'top-right':
+                    $overlayPos = "x=W-w-{$margin}:y={$margin}";
+                    break;
+                case 'bottom-left':
+                    $overlayPos = "x={$margin}:y=H-h-{$margin}";
+                    break;
+                case 'center':
+                    $overlayPos = "x=(W-w)/2:y=(H-h)/2";
+                    break;
+                case 'bottom-right':
+                default:
+                    $overlayPos = "x=W-w-{$margin}:y=H-h-{$margin}";
+                    break;
+            }
+
+            // FFmpeg filter: scale logo relative to source image width using scale2ref, apply opacity, overlay
+            $filterComplex = "[1:v][0:v]scale2ref=iw*{$scaleRatio}:-1:flags=lanczos[logo][bg];[logo]format=rgba,colorchannelmixer=aa={$opacityValue}[logoA];[bg][logoA]overlay={$overlayPos}";
+
+            $command = sprintf(
+                '%s -y -i %s -i %s -filter_complex "%s" -q:v 2 %s 2>&1',
+                escapeshellarg($ffmpegPath),
+                escapeshellarg($sourcePath),
+                escapeshellarg($logoPath),
+                $filterComplex,
+                escapeshellarg($outputPath)
+            );
+
+            Log::info('FFmpeg add logo overlay command', ['command' => $command]);
+
+            exec($command, $output, $returnCode);
+
+            // Clean up temp logo file
+            if ($tempLogoPath && file_exists($tempLogoPath)) {
+                unlink($tempLogoPath);
+            }
+
+            if ($returnCode !== 0) {
+                Log::error('FFmpeg add logo overlay failed', [
+                    'output' => implode("\n", $output),
+                    'return_code' => $returnCode
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'error' => 'FFmpeg logo overlay failed: ' . implode("\n", array_slice($output, -3))
+                ], 500);
+            }
+
+            $relativePath = 'books/' . $audioBook->id . '/thumbnails/' . $outputFilename;
+
+            Log::info("Added logo overlay to image for audiobook {$audioBook->id}", [
+                'source' => $sourceImage,
+                'output' => $outputFilename,
+                'position' => $position
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'path' => $relativePath,
+                'url' => asset('storage/' . $relativePath),
+                'filename' => $outputFilename
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Add logo overlay failed for audiobook {$audioBook->id}: " . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Apply text overlay to image using FFmpeg
      */
     private function applyFFmpegTextOverlay(string $inputPath, string $outputPath, array $textElements, array $styling): array
@@ -2952,6 +3282,8 @@ class AudioBookController extends Controller
      */
     public function generateChapterVideo(AudioBook $audioBook, AudioBookChapter $chapter)
     {
+        set_time_limit(0); // No PHP timeout for long video encoding
+
         try {
             // Verify chapter belongs to audiobook
             if ($chapter->audio_book_id !== $audioBook->id) {
@@ -3051,7 +3383,10 @@ class AudioBookController extends Controller
 
             // Build video filter based on wave settings
             $waveEnabled = $audioBook->wave_enabled ?? false;
-            $baseFilter = "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2";
+            // Use 720p for fast encoding (still image + audio doesn't benefit from higher res)
+            $videoWidth = 1280;
+            $videoHeight = 720;
+            $baseFilter = "scale={$videoWidth}:{$videoHeight}:force_original_aspect_ratio=decrease,pad={$videoWidth}:{$videoHeight}:(ow-iw)/2:(oh-ih)/2";
 
             if ($waveEnabled) {
                 $rawWaveType = $audioBook->wave_type ?? 'cline';
@@ -3063,33 +3398,27 @@ class AudioBookController extends Controller
                 $waveColor = ltrim($audioBook->wave_color ?? '#00ff00', '#');
                 $waveOpacity = $audioBook->wave_opacity ?? 0.8;
 
-                // Calculate Y position for wave overlay
-                // Video is 720p, so positions are:
-                // top: y=20
-                // center: y=(720-waveHeight)/2
-                // bottom: y=720-waveHeight-20
+                // Calculate Y position for wave overlay (720p)
                 switch ($wavePosition) {
                     case 'top':
                         $waveY = 20;
                         break;
                     case 'center':
-                        $waveY = (720 - $waveHeight) / 2;
+                        $waveY = ($videoHeight - $waveHeight) / 2;
                         break;
                     case 'bottom':
                     default:
-                        $waveY = 720 - $waveHeight - 20;
+                        $waveY = $videoHeight - $waveHeight - 20;
                         break;
                 }
 
                 // Build FFmpeg filter_complex for wave overlay
-                // [1:a] = audio input for showwaves
-                // showwaves: generate waveform visualization
-                // mode: wave display mode (line, p2p, cline, point)
-                // colors: wave color in hex
-                // s: size of wave output
+                // Use rate=15 (lower framerate for wave rendering → much faster)
+                // Use showwaves at 720p width to match video
                 $filterComplex = sprintf(
-                    '[0:v]%s[bg];[1:a]showwaves=s=1280x%d:mode=%s:colors=0x%s@%.1f:rate=30[wave];[bg][wave]overlay=0:%d:format=auto[out]',
+                    '[0:v]%s[bg];[1:a]showwaves=s=%dx%d:mode=%s:colors=0x%s@%.1f:rate=15[wave];[bg][wave]overlay=0:%d:format=auto[out]',
                     $baseFilter,
+                    $videoWidth,
                     $waveHeight,
                     $waveType,
                     $waveColor,
@@ -3098,8 +3427,12 @@ class AudioBookController extends Controller
                 );
 
                 // FFmpeg command with wave overlay
+                // -framerate 15: lower input framerate for still image (wave drives visual updates)
+                // -preset ultrafast: fastest encoding
+                // -crf 28: slightly lower quality for faster encode (still good for still image)
+                // -threads 0: use all available CPU cores
                 $command = sprintf(
-                    '%s -y -loop 1 -framerate 30 -i %s -i %s -filter_complex "%s" -map "[out]" -map 1:a -c:v libx264 -preset ultrafast -tune stillimage -crf 23 -c:a aac -b:a 192k -pix_fmt yuv420p -shortest %s 2>&1',
+                    '%s -y -loop 1 -framerate 15 -i %s -i %s -filter_complex "%s" -map "[out]" -map 1:a -c:v libx264 -preset ultrafast -tune stillimage -crf 28 -c:a aac -b:a 128k -pix_fmt yuv420p -shortest -threads 0 %s 2>&1',
                     escapeshellarg($ffmpegPath),
                     escapeshellarg($imagePath),
                     escapeshellarg($audioPath),
@@ -3107,9 +3440,13 @@ class AudioBookController extends Controller
                     escapeshellarg($videoPath)
                 );
             } else {
-                // Original command without wave (optimized for speed)
+                // Command without wave (maximum speed optimization)
+                // -framerate 1: only 1 input frame per second (still image duplicated)
+                // -r 15: output 15fps (enough for still image playback)
+                // -crf 28: lower quality = faster encode (imperceptible on still image)
+                // -threads 0: use all available CPU cores
                 $command = sprintf(
-                    '%s -y -loop 1 -framerate 1 -i %s -i %s -c:v libx264 -preset ultrafast -tune stillimage -crf 23 -c:a aac -b:a 192k -pix_fmt yuv420p -r 30 -shortest -vf "%s" %s 2>&1',
+                    '%s -y -loop 1 -framerate 1 -i %s -i %s -c:v libx264 -preset ultrafast -tune stillimage -crf 28 -c:a aac -b:a 128k -pix_fmt yuv420p -r 15 -shortest -threads 0 -vf "%s" %s 2>&1',
                     escapeshellarg($ffmpegPath),
                     escapeshellarg($imagePath),
                     escapeshellarg($audioPath),
@@ -3285,7 +3622,7 @@ class AudioBookController extends Controller
             2 => ['pipe', 'w']
         ];
 
-        $process = \proc_open($command, $descriptorSpec, $pipes);
+        $process = proc_open($command, $descriptorSpec, $pipes);
         if (!is_resource($process)) {
             $this->updateDescriptionVideoLog($audioBookId, 'FFmpeg: khong the khoi tao process');
             return ['return_code' => 1, 'output' => []];
@@ -3401,7 +3738,11 @@ class AudioBookController extends Controller
         }
 
         // Chapter videos
-        foreach ($audioBook->chapters as $chapter) {
+        $totalChapters = $audioBook->chapters()->count();
+        $chaptersWithVideo = 0;
+        $chaptersWithoutVideo = [];
+
+        foreach ($audioBook->chapters()->orderBy('chapter_number')->get() as $chapter) {
             if ($chapter->video_path) {
                 $path = storage_path('app/public/' . $chapter->video_path);
                 if (file_exists($path)) {
@@ -3411,9 +3752,17 @@ class AudioBookController extends Controller
                         'label' => 'Chương ' . $chapter->chapter_number . ': ' . $chapter->title,
                         'path' => $chapter->video_path,
                         'duration' => $chapter->total_duration,
+                        'youtube_video_id' => $chapter->youtube_video_id,
+                        'youtube_video_title' => $chapter->youtube_video_title,
+                        'youtube_video_description' => $chapter->youtube_video_description,
+                        'youtube_uploaded_at' => $chapter->youtube_uploaded_at,
                     ];
+                    $chaptersWithVideo++;
+                    continue;
                 }
             }
+            // Chapter without video
+            $chaptersWithoutVideo[] = $chapter->chapter_number;
         }
 
         // Thumbnails from media gallery
@@ -3424,7 +3773,80 @@ class AudioBookController extends Controller
             'success' => true,
             'videos' => $videos,
             'thumbnails' => $thumbnails,
+            'total_chapters' => $totalChapters,
+            'chapters_with_video' => $chaptersWithVideo,
+            'chapters_without_video' => $chaptersWithoutVideo,
+            'saved_meta' => [
+                'youtube_playlist_id' => $audioBook->youtube_playlist_id,
+                'youtube_playlist_title' => $audioBook->youtube_playlist_title,
+                'youtube_video_title' => $audioBook->youtube_video_title,
+                'youtube_video_description' => $audioBook->youtube_video_description,
+                'youtube_video_tags' => $audioBook->youtube_video_tags,
+            ],
         ]);
+    }
+
+    /**
+     * Fetch existing YouTube playlists for the channel.
+     */
+    public function getYoutubePlaylists(AudioBook $audioBook)
+    {
+        $channel = $audioBook->youtubeChannel;
+        if (!$channel) {
+            return response()->json(['success' => false, 'error' => 'Audiobook chưa được gán kênh YouTube.'], 400);
+        }
+
+        $accessToken = YouTubeChannelController::getValidAccessToken($channel);
+        if (!$accessToken) {
+            return response()->json(['success' => false, 'error' => 'Không có access token YouTube. Vui lòng kết nối lại OAuth.'], 401);
+        }
+
+        try {
+            $client = new \GuzzleHttp\Client();
+
+            // Fetch playlists from YouTube API
+            $response = $client->get('https://www.googleapis.com/youtube/v3/playlists', [
+                'headers' => [
+                    'Authorization' => "Bearer {$accessToken}",
+                ],
+                'query' => [
+                    'part' => 'snippet,contentDetails',
+                    'mine' => 'true',
+                    'maxResults' => 50,
+                ],
+                'timeout' => 30,
+            ]);
+
+            $result = json_decode($response->getBody()->getContents(), true);
+            $playlists = [];
+
+            foreach ($result['items'] ?? [] as $item) {
+                $playlists[] = [
+                    'id' => $item['id'],
+                    'title' => $item['snippet']['title'],
+                    'description' => $item['snippet']['description'] ?? '',
+                    'video_count' => $item['contentDetails']['itemCount'] ?? 0,
+                    'published_at' => $item['snippet']['publishedAt'] ?? null,
+                ];
+            }
+
+            // Include currently saved playlist if exists
+            $currentPlaylistId = $audioBook->youtube_playlist_id;
+            $currentPlaylistTitle = $audioBook->youtube_playlist_title;
+
+            return response()->json([
+                'success' => true,
+                'playlists' => $playlists,
+                'current_playlist_id' => $currentPlaylistId,
+                'current_playlist_title' => $currentPlaylistTitle,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch YouTube playlists', ['error' => $e->getMessage(), 'audiobook' => $audioBook->id]);
+            return response()->json([
+                'success' => false,
+                'error' => 'Không thể lấy danh sách playlists: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -3471,6 +3893,12 @@ class AudioBookController extends Controller
                 $title = array_shift($lines) ?? $audioBook->title;
                 $tags = implode(', ', array_slice($lines, 0, 1)) ?: "audiobook, sách nói, {$audioBook->author}, {$audioBook->category}";
 
+                // Save to database
+                $audioBook->update([
+                    'youtube_video_title' => $title,
+                    'youtube_video_tags' => $tags,
+                ]);
+
                 return response()->json(['success' => true, 'title' => $title, 'tags' => $tags]);
             } else {
                 $prompt = "Bạn là chuyên gia YouTube SEO. Hãy viết mô tả YouTube chuyên nghiệp cho video audiobook/sách nói sau:\n\n";
@@ -3481,8 +3909,8 @@ class AudioBookController extends Controller
                 if ($audioBook->description) $prompt .= "\nMô tả gốc (tham khảo):\n" . mb_substr($audioBook->description, 0, 500) . "\n";
                 $prompt .= "\nYêu cầu:\n";
                 $prompt .= "- Viết bằng tiếng Việt, tối đa 300 từ\n";
+                $prompt .= "- KHÔNG sử dụng ký tự markdown như ** hoặc __ để in đậm. Thay vào đó dùng emoji phù hợp (📚, 🎧, ✨, 🔥, 👇, ❤️, 🎵, 📖, ⭐, 💡...) để làm nổi bật các phần\n";
                 $prompt .= "- Bao gồm: giới thiệu ngắn sách, lý do nên nghe, CTA (đăng ký, like, bình luận)\n";
-                $prompt .= "- Thêm timestamps giả (00:00 Giới thiệu, ...)\n";
                 $prompt .= "- Thêm hashtag ở cuối (#audiobook #sachnoiviet ...)\n";
                 $prompt .= "- Chỉ trả về nội dung mô tả, không giải thích";
 
@@ -3497,6 +3925,11 @@ class AudioBookController extends Controller
 
                 $result = json_decode($response->getBody()->getContents(), true);
                 $description = trim($result['candidates'][0]['content']['parts'][0]['text'] ?? '');
+
+                // Save to database
+                $audioBook->update([
+                    'youtube_video_description' => $description,
+                ]);
 
                 return response()->json(['success' => true, 'description' => $description]);
             }
@@ -3544,23 +3977,39 @@ class AudioBookController extends Controller
                 'headers' => ['Content-Type' => 'application/json'],
                 'json' => [
                     'contents' => [['parts' => [['text' => $prompt]]]],
-                    'generationConfig' => ['temperature' => 0.7, 'maxOutputTokens' => 2000]
+                    'generationConfig' => [
+                        'temperature' => 0.7,
+                        'maxOutputTokens' => 8192,
+                        'responseMimeType' => 'application/json',
+                    ]
                 ],
-                'timeout' => 60
+                'timeout' => 90
             ]);
 
             $result = json_decode($response->getBody()->getContents(), true);
             $text = trim($result['candidates'][0]['content']['parts'][0]['text'] ?? '');
 
-            // Extract JSON from response (may be wrapped in ```json ... ```)
-            if (preg_match('/\[.*\]/s', $text, $matches)) {
+            \Log::info('generateVideoMeta AI response', ['text_length' => mb_strlen($text), 'text_preview' => mb_substr($text, 0, 300)]);
+
+            // Try direct JSON parse first (responseMimeType should return clean JSON)
+            $items = json_decode($text, true);
+
+            // Fallback: extract JSON array from markdown code blocks or mixed text
+            if (!is_array($items)) {
+                // Remove markdown code block wrappers
+                $cleaned = preg_replace('/^```(?:json)?\s*/i', '', $text);
+                $cleaned = preg_replace('/\s*```\s*$/', '', $cleaned);
+                $items = json_decode(trim($cleaned), true);
+            }
+
+            // Last resort: find JSON array in text
+            if (!is_array($items) && preg_match('/\[[\s\S]*\]/s', $text, $matches)) {
                 $items = json_decode($matches[0], true);
-            } else {
-                $items = json_decode($text, true);
             }
 
             if (!is_array($items)) {
-                throw new \Exception('AI không trả về JSON hợp lệ');
+                \Log::error('generateVideoMeta: Failed to parse AI JSON', ['raw_text' => mb_substr($text, 0, 1000)]);
+                throw new \Exception('AI không trả về JSON hợp lệ. Response: ' . mb_substr($text, 0, 200));
             }
 
             // Map back to chapters
@@ -3572,6 +4021,17 @@ class AudioBookController extends Controller
                     'title' => $items[$i]['title'] ?? "{$mainTitle} - Phần " . ($i + 1),
                     'description' => $items[$i]['description'] ?? $mainDesc,
                 ];
+            }
+
+            // Save generated meta to DB for each chapter
+            foreach ($mapped as $item) {
+                $chapterId = str_replace('chapter_', '', $item['id']);
+                AudioBookChapter::where('id', $chapterId)
+                    ->where('audio_book_id', $audioBook->id)
+                    ->update([
+                        'youtube_video_title' => $item['title'],
+                        'youtube_video_description' => $item['description'],
+                    ]);
             }
 
             return response()->json(['success' => true, 'items' => $mapped]);
@@ -3628,10 +4088,15 @@ class AudioBookController extends Controller
 
             // Upload thumbnail if selected
             $thumbnailPath = $request->input('thumbnail_path');
+            $thumbnailWarning = null;
             if ($thumbnailPath) {
                 $fullThumbPath = storage_path('app/public/' . $thumbnailPath);
                 if (file_exists($fullThumbPath)) {
-                    $this->youtubeSetThumbnail($accessToken, $videoId, $fullThumbPath);
+                    sleep(3); // Wait for YouTube to process the video
+                    $thumbSuccess = $this->youtubeSetThumbnail($accessToken, $videoId, $fullThumbPath);
+                    if (!$thumbSuccess) {
+                        $thumbnailWarning = 'Không thể đặt thumbnail. Kênh YouTube cần xác minh số điện thoại để sử dụng custom thumbnail.';
+                    }
                 }
             }
 
@@ -3640,14 +4105,84 @@ class AudioBookController extends Controller
                 $videoUrl = "https://www.youtube.com/shorts/{$videoId}";
             }
 
-            return response()->json([
+            // Save tracking data to chapter if it's a chapter video
+            if ($request->input('video_type') === 'chapter') {
+                $chapterId = str_replace('chapter_', '', $request->input('video_id'));
+                $chapter = AudioBookChapter::where('audio_book_id', $audioBook->id)
+                    ->where('id', $chapterId)
+                    ->first();
+
+                if ($chapter) {
+                    $chapter->update([
+                        'youtube_video_id' => $videoId,
+                        'youtube_video_title' => $title,
+                        'youtube_video_description' => $description,
+                        'youtube_uploaded_at' => now(),
+                    ]);
+                }
+            }
+
+            $response = [
                 'success' => true,
                 'video_id' => $videoId,
                 'video_url' => $videoUrl,
+            ];
+
+            if ($thumbnailWarning) {
+                $response['thumbnail_warning'] = $thumbnailWarning;
+            }
+
+            return response()->json($response);
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            $responseBody = $e->getResponse() ? $e->getResponse()->getBody()->getContents() : '';
+            $errorData = json_decode($responseBody, true);
+            $errorMessage = $errorData['error']['message'] ?? $e->getMessage();
+
+            Log::error('YouTube upload failed - Client Error', [
+                'error' => $errorMessage,
+                'audiobook' => $audioBook->id,
+                'response' => $responseBody
             ]);
+
+            // Check for specific YouTube errors
+            if (str_contains($errorMessage, 'exceeded the number of videos')) {
+                return response()->json([
+                    'success' => false,
+                    'error' => '❌ Giới hạn upload YouTube',
+                    'details' => 'Bạn đã vượt quá giới hạn upload video của YouTube. Các giới hạn phổ biến:',
+                    'limits' => [
+                        '• Tài khoản chưa xác minh: 6 videos/ngày',
+                        '• Quota API: ~6 videos/ngày (10,000 units)',
+                        '• Cần chờ 24 giờ để reset quota',
+                    ],
+                    'solutions' => [
+                        '1. Xác minh kênh YouTube (khuyến nghị): https://www.youtube.com/verify',
+                        '2. Chờ 24 giờ để quota được reset',
+                        '3. Liên hệ Google để tăng quota: https://support.google.com/youtube/contact/yt_api_form',
+                    ]
+                ], 429);
+            }
+
+            if (str_contains($errorMessage, 'quota')) {
+                return response()->json([
+                    'success' => false,
+                    'error' => '❌ Vượt quá quota API',
+                    'details' => 'API quota của YouTube đã hết. Vui lòng chờ 24 giờ hoặc liên hệ Google để tăng quota.',
+                ], 429);
+            }
+
+            return response()->json([
+                'success' => false,
+                'error' => '❌ Upload thất bại',
+                'details' => $errorMessage
+            ], $e->getResponse() ? $e->getResponse()->getStatusCode() : 500);
+
         } catch (\Exception $e) {
             Log::error('YouTube upload failed', ['error' => $e->getMessage(), 'audiobook' => $audioBook->id]);
-            return response()->json(['success' => false, 'error' => 'Upload thất bại: ' . $e->getMessage()], 500);
+            return response()->json([
+                'success' => false,
+                'error' => '❌ Upload thất bại: ' . $e->getMessage()
+            ], 500);
         }
     }
 
@@ -3695,6 +4230,226 @@ class AudioBookController extends Controller
 
             // Step 2: Upload each video and add to playlist
             $uploadedVideos = [];
+            $thumbnailFailed = [];
+            $videoIdsForThumbnail = []; // Track video IDs to retry thumbnail later
+
+            foreach ($request->input('items') as $index => $item) {
+                $videoPath = $this->resolveVideoPath($audioBook, $item['video_id'], $item['video_type']);
+                if (!$videoPath || !file_exists($videoPath)) {
+                    Log::warning("Skipping video - file not found", ['video_id' => $item['video_id']]);
+                    continue;
+                }
+
+                $videoId = $this->youtubeUploadVideo(
+                    $accessToken,
+                    $videoPath,
+                    $item['title'],
+                    $item['description'] ?? '',
+                    $tags,
+                    $privacy
+                );
+
+                // Add to playlist first (this is more reliable)
+                $this->youtubeAddToPlaylist($accessToken, $playlistId, $videoId);
+
+                // Save tracking data to chapter
+                if ($item['video_type'] === 'chapter') {
+                    $chapterId = str_replace('chapter_', '', $item['video_id']);
+                    AudioBookChapter::where('id', $chapterId)
+                        ->where('audio_book_id', $audioBook->id)
+                        ->update([
+                            'youtube_video_id' => $videoId,
+                            'youtube_video_title' => $item['title'],
+                            'youtube_video_description' => $item['description'] ?? '',
+                            'youtube_uploaded_at' => now(),
+                        ]);
+                }
+
+                $videoIdsForThumbnail[] = [
+                    'videoId' => $videoId,
+                    'title' => $item['title'],
+                ];
+
+                $uploadedVideos[] = [
+                    'title' => $item['title'],
+                    'video_id' => $videoId,
+                    'url' => "https://www.youtube.com/watch?v={$videoId}",
+                ];
+            }
+
+            // Step 3: Set thumbnails after all uploads complete
+            // YouTube needs processing time, so we set thumbnails after all videos are uploaded
+            if ($fullThumbPath && file_exists($fullThumbPath) && !empty($videoIdsForThumbnail)) {
+                // Wait a bit for YouTube to process the uploads
+                sleep(5);
+
+                foreach ($videoIdsForThumbnail as $item) {
+                    $thumbSuccess = $this->youtubeSetThumbnail($accessToken, $item['videoId'], $fullThumbPath);
+                    if (!$thumbSuccess) {
+                        $thumbnailFailed[] = $item['title'];
+                    }
+                }
+            }
+
+            // Save playlist info to audiobook
+            $audioBook->update([
+                'youtube_playlist_id' => $playlistId,
+                'youtube_playlist_title' => $request->input('playlist_name'),
+            ]);
+
+            $response = [
+                'success' => true,
+                'playlist_id' => $playlistId,
+                'playlist_url' => "https://www.youtube.com/playlist?list={$playlistId}",
+                'uploaded_videos' => $uploadedVideos,
+            ];
+
+            if (!empty($thumbnailFailed)) {
+                $response['thumbnail_warning'] = 'Không thể đặt thumbnail cho ' . count($thumbnailFailed) . ' video: ' . implode(', ', $thumbnailFailed) . '. Kênh YouTube cần xác minh số điện thoại để sử dụng custom thumbnail.';
+            }
+
+            return response()->json($response);
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            $responseBody = $e->getResponse() ? $e->getResponse()->getBody()->getContents() : '';
+            $errorData = json_decode($responseBody, true);
+            $errorMessage = $errorData['error']['message'] ?? $e->getMessage();
+
+            Log::error('YouTube playlist creation failed - Client Error', [
+                'error' => $errorMessage,
+                'audiobook' => $audioBook->id,
+                'response' => $responseBody,
+                'uploaded_videos' => $uploadedVideos ?? []
+            ]);
+
+            // Check for specific YouTube errors
+            if (str_contains($errorMessage, 'exceeded the number of videos')) {
+                return response()->json([
+                    'success' => false,
+                    'error' => '❌ Giới hạn upload YouTube',
+                    'details' => 'Bạn đã vượt quá giới hạn upload video của YouTube.',
+                    'uploaded_count' => count($uploadedVideos ?? []),
+                    'uploaded_videos' => $uploadedVideos ?? [],
+                    'limits' => [
+                        '• Tài khoản chưa xác minh: 6 videos/ngày',
+                        '• Quota API: ~6 videos/ngày (10,000 units)',
+                        '• Cần chờ 24 giờ để reset quota',
+                    ],
+                    'solutions' => [
+                        '1. Xác minh kênh YouTube (khuyến nghị): https://www.youtube.com/verify',
+                        '2. Chờ 24 giờ để quota được reset',
+                        '3. Upload từng video một thay vì hàng loạt',
+                        '4. Liên hệ Google để tăng quota: https://support.google.com/youtube/contact/yt_api_form',
+                    ]
+                ], 429);
+            }
+
+            if (str_contains($errorMessage, 'quota')) {
+                return response()->json([
+                    'success' => false,
+                    'error' => '❌ Vượt quá quota API',
+                    'details' => 'API quota của YouTube đã hết.',
+                    'uploaded_count' => count($uploadedVideos ?? []),
+                    'uploaded_videos' => $uploadedVideos ?? [],
+                ], 429);
+            }
+
+            return response()->json([
+                'success' => false,
+                'error' => '❌ Lỗi tạo playlist',
+                'details' => $errorMessage,
+                'uploaded_count' => count($uploadedVideos ?? []),
+                'uploaded_videos' => $uploadedVideos ?? []
+            ], $e->getResponse() ? $e->getResponse()->getStatusCode() : 500);
+
+        } catch (\Exception $e) {
+            Log::error('YouTube playlist creation failed', ['error' => $e->getMessage(), 'audiobook' => $audioBook->id]);
+            return response()->json([
+                'success' => false,
+                'error' => '❌ Lỗi tạo playlist: ' . $e->getMessage(),
+                'uploaded_count' => count($uploadedVideos ?? []),
+                'uploaded_videos' => $uploadedVideos ?? []
+            ], 500);
+        }
+    }
+
+    /**
+     * Save publish meta data to DB without uploading.
+     */
+    public function savePublishMeta(Request $request, AudioBook $audioBook)
+    {
+        $request->validate([
+            'title' => 'nullable|string|max:500',
+            'description' => 'nullable|string',
+            'tags' => 'nullable|string',
+            'playlist_title' => 'nullable|string|max:150',
+            'chapters' => 'nullable|array',
+            'chapters.*.id' => 'required|string',
+            'chapters.*.title' => 'nullable|string|max:200',
+            'chapters.*.description' => 'nullable|string',
+        ]);
+
+        // Save audiobook-level meta
+        $audioBook->update([
+            'youtube_video_title' => $request->input('title', $audioBook->youtube_video_title),
+            'youtube_video_description' => $request->input('description', $audioBook->youtube_video_description),
+            'youtube_video_tags' => $request->input('tags', $audioBook->youtube_video_tags),
+            'youtube_playlist_title' => $request->input('playlist_title', $audioBook->youtube_playlist_title),
+        ]);
+
+        // Save per-chapter meta
+        $chapters = $request->input('chapters', []);
+        foreach ($chapters as $item) {
+            $chapterId = str_replace('chapter_', '', $item['id']);
+            AudioBookChapter::where('id', $chapterId)
+                ->where('audio_book_id', $audioBook->id)
+                ->update([
+                    'youtube_video_title' => $item['title'] ?? null,
+                    'youtube_video_description' => $item['description'] ?? null,
+                ]);
+        }
+
+        return response()->json(['success' => true, 'message' => 'Đã lưu thông tin phát hành.']);
+    }
+
+    /**
+     * Upload videos to an existing YouTube playlist.
+     */
+    public function addToExistingPlaylist(Request $request, AudioBook $audioBook)
+    {
+        $request->validate([
+            'playlist_id' => 'required|string',
+            'playlist_title' => 'nullable|string|max:150',
+            'privacy' => 'required|string|in:public,unlisted,private',
+            'thumbnail_path' => 'nullable|string',
+            'tags' => 'nullable|string',
+            'items' => 'required|array|min:1',
+            'items.*.video_id' => 'required|string',
+            'items.*.video_type' => 'required|string|in:description,chapter',
+            'items.*.title' => 'required|string|max:100',
+            'items.*.description' => 'nullable|string',
+        ]);
+
+        $channel = $audioBook->youtubeChannel;
+        if (!$channel) {
+            return response()->json(['success' => false, 'error' => 'Audiobook chưa được gán kênh YouTube.'], 400);
+        }
+
+        $accessToken = YouTubeChannelController::getValidAccessToken($channel);
+        if (!$accessToken) {
+            return response()->json(['success' => false, 'error' => 'Không có access token YouTube. Vui lòng kết nối lại OAuth.'], 401);
+        }
+
+        $playlistId = $request->input('playlist_id');
+        $privacy = $request->input('privacy', 'private');
+        $tags = array_filter(array_map('trim', explode(',', $request->input('tags', ''))));
+        $thumbnailPath = $request->input('thumbnail_path');
+        $fullThumbPath = $thumbnailPath ? storage_path('app/public/' . $thumbnailPath) : null;
+
+        try {
+            $uploadedVideos = [];
+            $thumbnailFailed = [];
+            $videoIdsForThumbnail = [];
+
             foreach ($request->input('items') as $item) {
                 $videoPath = $this->resolveVideoPath($audioBook, $item['video_id'], $item['video_type']);
                 if (!$videoPath || !file_exists($videoPath)) {
@@ -3711,13 +4466,25 @@ class AudioBookController extends Controller
                     $privacy
                 );
 
-                // Set thumbnail
-                if ($fullThumbPath && file_exists($fullThumbPath)) {
-                    $this->youtubeSetThumbnail($accessToken, $videoId, $fullThumbPath);
+                $this->youtubeAddToPlaylist($accessToken, $playlistId, $videoId);
+
+                // Save tracking data to chapter
+                if ($item['video_type'] === 'chapter') {
+                    $chapterId = str_replace('chapter_', '', $item['video_id']);
+                    AudioBookChapter::where('id', $chapterId)
+                        ->where('audio_book_id', $audioBook->id)
+                        ->update([
+                            'youtube_video_id' => $videoId,
+                            'youtube_video_title' => $item['title'],
+                            'youtube_video_description' => $item['description'] ?? '',
+                            'youtube_uploaded_at' => now(),
+                        ]);
                 }
 
-                // Add to playlist
-                $this->youtubeAddToPlaylist($accessToken, $playlistId, $videoId);
+                $videoIdsForThumbnail[] = [
+                    'videoId' => $videoId,
+                    'title' => $item['title'],
+                ];
 
                 $uploadedVideos[] = [
                     'title' => $item['title'],
@@ -3726,16 +4493,100 @@ class AudioBookController extends Controller
                 ];
             }
 
-            return response()->json([
+            // Set thumbnails
+            if ($fullThumbPath && file_exists($fullThumbPath) && !empty($videoIdsForThumbnail)) {
+                sleep(5);
+                foreach ($videoIdsForThumbnail as $item) {
+                    $thumbSuccess = $this->youtubeSetThumbnail($accessToken, $item['videoId'], $fullThumbPath);
+                    if (!$thumbSuccess) {
+                        $thumbnailFailed[] = $item['title'];
+                    }
+                }
+            }
+
+            // Save playlist info to audiobook
+            $audioBook->update([
+                'youtube_playlist_id' => $playlistId,
+                'youtube_playlist_title' => $request->input('playlist_title', $audioBook->youtube_playlist_title),
+            ]);
+
+            $response = [
                 'success' => true,
                 'playlist_id' => $playlistId,
                 'playlist_url' => "https://www.youtube.com/playlist?list={$playlistId}",
                 'uploaded_videos' => $uploadedVideos,
+            ];
+
+            if (!empty($thumbnailFailed)) {
+                $response['thumbnail_warning'] = 'Không thể đặt thumbnail cho ' . count($thumbnailFailed) . ' video. Kênh YouTube cần xác minh số điện thoại.';
+            }
+
+            return response()->json($response);
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            $responseBody = $e->getResponse() ? $e->getResponse()->getBody()->getContents() : '';
+            $errorData = json_decode($responseBody, true);
+            $errorMessage = $errorData['error']['message'] ?? $e->getMessage();
+
+            Log::error('YouTube add to playlist failed', [
+                'error' => $errorMessage,
+                'audiobook' => $audioBook->id,
+                'uploaded_videos' => $uploadedVideos ?? []
             ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => '❌ Lỗi upload vào playlist: ' . $errorMessage,
+                'uploaded_count' => count($uploadedVideos ?? []),
+                'uploaded_videos' => $uploadedVideos ?? []
+            ], $e->getResponse() ? $e->getResponse()->getStatusCode() : 500);
         } catch (\Exception $e) {
-            Log::error('YouTube playlist creation failed', ['error' => $e->getMessage(), 'audiobook' => $audioBook->id]);
-            return response()->json(['success' => false, 'error' => 'Lỗi tạo playlist: ' . $e->getMessage()], 500);
+            Log::error('YouTube add to playlist failed', ['error' => $e->getMessage(), 'audiobook' => $audioBook->id]);
+            return response()->json([
+                'success' => false,
+                'error' => '❌ Lỗi: ' . $e->getMessage(),
+                'uploaded_count' => count($uploadedVideos ?? []),
+                'uploaded_videos' => $uploadedVideos ?? []
+            ], 500);
         }
+    }
+
+    /**
+     * Get YouTube publishing history for this audiobook.
+     */
+    public function getPublishHistory(AudioBook $audioBook)
+    {
+        $history = [];
+
+        // Chapters with YouTube upload
+        $chapters = $audioBook->chapters()
+            ->whereNotNull('youtube_video_id')
+            ->orderBy('youtube_uploaded_at', 'desc')
+            ->get();
+
+        foreach ($chapters as $chapter) {
+            $history[] = [
+                'type' => 'chapter',
+                'chapter_number' => $chapter->chapter_number,
+                'chapter_title' => $chapter->title,
+                'youtube_video_id' => $chapter->youtube_video_id,
+                'youtube_video_title' => $chapter->youtube_video_title,
+                'youtube_video_url' => "https://www.youtube.com/watch?v={$chapter->youtube_video_id}",
+                'uploaded_at' => $chapter->youtube_uploaded_at,
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'history' => $history,
+            'playlist' => [
+                'id' => $audioBook->youtube_playlist_id,
+                'title' => $audioBook->youtube_playlist_title,
+                'url' => $audioBook->youtube_playlist_id
+                    ? "https://www.youtube.com/playlist?list={$audioBook->youtube_playlist_id}"
+                    : null,
+            ],
+            'total_uploaded' => count($history),
+        ]);
     }
 
     // ---- YouTube API Helper Methods ----
@@ -3829,25 +4680,46 @@ class AudioBookController extends Controller
     }
 
     /**
-     * Set thumbnail for a YouTube video.
+     * Set thumbnail for a YouTube video (with retry).
+     * Returns true on success, false on failure.
      */
-    private function youtubeSetThumbnail(string $accessToken, string $videoId, string $thumbnailPath): void
+    private function youtubeSetThumbnail(string $accessToken, string $videoId, string $thumbnailPath, int $maxRetries = 3): bool
     {
-        try {
-            $client = new \GuzzleHttp\Client();
-            $mimeType = mime_content_type($thumbnailPath) ?: 'image/jpeg';
+        $client = new \GuzzleHttp\Client();
+        $mimeType = mime_content_type($thumbnailPath) ?: 'image/jpeg';
 
-            $client->post("https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId={$videoId}", [
-                'headers' => [
-                    'Authorization' => "Bearer {$accessToken}",
-                    'Content-Type' => $mimeType,
-                ],
-                'body' => fopen($thumbnailPath, 'r'),
-                'timeout' => 30,
-            ]);
-        } catch (\Exception $e) {
-            Log::warning('Failed to set YouTube thumbnail', ['videoId' => $videoId, 'error' => $e->getMessage()]);
+        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+            try {
+                // YouTube may need time to process the uploaded video before accepting thumbnail
+                if ($attempt > 1) {
+                    sleep(5 * $attempt); // Progressive delay: 10s, 15s
+                }
+
+                $client->post("https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId={$videoId}", [
+                    'headers' => [
+                        'Authorization' => "Bearer {$accessToken}",
+                        'Content-Type' => $mimeType,
+                    ],
+                    'body' => fopen($thumbnailPath, 'r'),
+                    'timeout' => 30,
+                ]);
+
+                Log::info('YouTube thumbnail set successfully', ['videoId' => $videoId, 'attempt' => $attempt]);
+                return true;
+            } catch (\Exception $e) {
+                Log::warning('Failed to set YouTube thumbnail', [
+                    'videoId' => $videoId,
+                    'attempt' => $attempt,
+                    'error' => $e->getMessage()
+                ]);
+
+                if ($attempt === $maxRetries) {
+                    return false;
+                }
+            }
         }
+
+        return false;
     }
 
     /**

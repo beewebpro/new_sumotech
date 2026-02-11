@@ -5,7 +5,7 @@
         <div class="max-w-2xl mx-auto sm:px-6 lg:px-8">
             <div class="flex justify-between items-center mb-6">
                 <h2 class="font-semibold text-2xl text-gray-800">📚 Tạo Sách Mới</h2>
-                <a href="{{ route('audiobooks.index') }}"
+                <a href="{{ route('youtube-channels.index') }}"
                     class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
                     Quay lại
                 </a>
@@ -15,6 +15,35 @@
                 <div class="p-6">
                     <form method="POST" action="{{ route('audiobooks.store') }}" enctype="multipart/form-data">
                         @csrf
+
+                        <!-- Hidden fields for book URL and source (used for auto-scraping chapters) -->
+                        <input type="hidden" name="book_url" id="bookUrlHidden">
+                        <input type="hidden" name="book_source" id="bookSourceHidden">
+                        <input type="hidden" name="cover_image_url" id="coverImageUrlHidden">
+
+                        <!-- URL Auto-Fill Section -->
+                        <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <label class="block text-sm font-medium text-blue-900 mb-2">🔗 Tự động điền thông tin từ URL</label>
+                            <div class="flex gap-2">
+                                <input type="url" id="bookUrl"
+                                    class="flex-1 px-3 py-2 border border-blue-300 rounded-lg text-sm"
+                                    placeholder="Nhập URL sách (ví dụ: https://docsach24.co/e-book/dao-giau-vang-118.html)">
+                                <button type="button" id="fetchMetadataBtn"
+                                    class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
+                                    Lấy thông tin
+                                </button>
+                            </div>
+                            <p class="text-xs text-blue-700 mt-2">
+                                Hỗ trợ: {{ implode(', ', array_column($scrapeSources, 'label')) }}
+                            </p>
+                            <div id="fetchStatus" class="mt-2 text-sm"></div>
+
+                            <!-- Cover Image Preview -->
+                            <div id="coverImagePreview" class="mt-3 hidden">
+                                <p class="text-xs font-medium text-blue-900 mb-2">📷 Ảnh bìa từ URL:</p>
+                                <img id="coverImagePreviewImg" src="" alt="Cover" class="w-32 h-auto rounded-lg border-2 border-blue-300">
+                            </div>
+                        </div>
 
                         <!-- Channel Selection -->
                         <div class="mb-6">
@@ -198,7 +227,7 @@
                                 class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
                                 ✓ Tạo Sách
                             </button>
-                            <a href="{{ route('audiobooks.index') }}"
+                            <a href="{{ route('youtube-channels.index') }}"
                                 class="flex-1 text-center bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg transition duration-200">
                                 Hủy
                             </a>
@@ -231,6 +260,133 @@
             if (categorySelect) {
                 categorySelect.addEventListener('change', () => toggleCustom(categorySelect, categoryCustomWrap));
                 toggleCustom(categorySelect, categoryCustomWrap);
+            }
+
+            // Auto-fill functionality
+            const bookUrlInput = document.getElementById('bookUrl');
+            const fetchMetadataBtn = document.getElementById('fetchMetadataBtn');
+            const fetchStatus = document.getElementById('fetchStatus');
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+
+            if (fetchMetadataBtn && bookUrlInput) {
+                fetchMetadataBtn.addEventListener('click', async function() {
+                    const bookUrl = bookUrlInput.value.trim();
+
+                    if (!bookUrl) {
+                        showStatus('error', 'Vui lòng nhập URL sách');
+                        return;
+                    }
+
+                    // Disable button and show loading
+                    fetchMetadataBtn.disabled = true;
+                    fetchMetadataBtn.textContent = 'Đang tải...';
+                    showStatus('loading', 'Đang lấy thông tin sách...');
+
+                    try {
+                        const response = await fetch('{{ route('audiobooks.fetch.book.metadata') }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': csrfToken,
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({ book_url: bookUrl })
+                        });
+
+                        const data = await response.json();
+
+                        console.log('Fetched data:', data); // Debug log
+
+                        if (response.ok && data.success) {
+                            // Auto-fill form fields
+                            if (data.title) {
+                                document.querySelector('input[name="title"]').value = data.title;
+                                console.log('Filled title:', data.title);
+                            }
+                            if (data.author) {
+                                document.querySelector('input[name="author"]').value = data.author;
+                                console.log('Filled author:', data.author);
+                            }
+                            if (data.description) {
+                                document.querySelector('textarea[name="description"]').value = data.description;
+                                console.log('Filled description');
+                            }
+
+                            // Handle category (thể loại)
+                            if (data.category) {
+                                const categorySelect = document.getElementById('categorySelect');
+                                const categoryOption = Array.from(categorySelect.options).find(
+                                    opt => opt.value.toLowerCase() === data.category.toLowerCase()
+                                );
+
+                                if (categoryOption) {
+                                    categorySelect.value = categoryOption.value;
+                                    toggleCustom(categorySelect, categoryCustomWrap);
+                                } else {
+                                    // Use custom category
+                                    categorySelect.value = 'custom';
+                                    toggleCustom(categorySelect, categoryCustomWrap);
+                                    document.getElementById('categoryCustom').value = data.category;
+                                }
+                                console.log('Filled category:', data.category);
+                            }
+
+                            // Handle cover image
+                            if (data.cover_image) {
+                                const coverImagePreview = document.getElementById('coverImagePreview');
+                                const coverImagePreviewImg = document.getElementById('coverImagePreviewImg');
+                                const coverImageUrlHidden = document.getElementById('coverImageUrlHidden');
+
+                                coverImagePreviewImg.src = data.cover_image;
+                                coverImageUrlHidden.value = data.cover_image;
+                                coverImagePreview.classList.remove('hidden');
+                                console.log('Cover image URL:', data.cover_image);
+                            }
+
+                            // Store book URL and source for automatic chapter scraping after creation
+                            document.getElementById('bookUrlHidden').value = bookUrl;
+                            document.getElementById('bookSourceHidden').value = data.book_source;
+
+                            const statusDetails = [
+                                `✓ Đã lấy thông tin thành công!`,
+                                `📖 Tiêu đề: ${data.title || 'N/A'}`,
+                                `✍️ Tác giả: ${data.author || 'N/A'}`,
+                                `📚 Thể loại: ${data.category || 'N/A'}`,
+                                `📑 Số chương: ${data.total_chapters || 0}`,
+                                `🖼️ Ảnh bìa: ${data.cover_image ? 'Có' : 'Không'}`
+                            ];
+
+                            showStatus('success', statusDetails.join('<br>'));
+                        } else {
+                            showStatus('error', data.error || 'Lỗi khi lấy thông tin sách');
+                        }
+                    } catch (error) {
+                        console.error('Fetch error:', error);
+                        showStatus('error', 'Lỗi kết nối. Vui lòng thử lại.');
+                    } finally {
+                        // Re-enable button
+                        fetchMetadataBtn.disabled = false;
+                        fetchMetadataBtn.textContent = 'Lấy thông tin';
+                    }
+                });
+
+                // Allow Enter key to trigger fetch
+                bookUrlInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        fetchMetadataBtn.click();
+                    }
+                });
+            }
+
+            function showStatus(type, message) {
+                const colors = {
+                    loading: 'text-blue-700 bg-blue-50 border border-blue-200',
+                    success: 'text-green-700 bg-green-50 border border-green-200',
+                    error: 'text-red-700 bg-red-50 border border-red-200'
+                };
+                fetchStatus.className = `mt-3 p-3 text-sm rounded-lg ${colors[type] || 'text-gray-700'}`;
+                fetchStatus.innerHTML = message;
             }
         })();
     </script>

@@ -98,6 +98,7 @@ class TTSService
             'hn_female_hermer_stor_48k-fhg' => 'HN – Ngọc Lan (48k, kể chuyện)',
             'hn_female_lenka_stor_48k-phg' => 'HN – Nguyệt Dương (48k, kể chuyện)',
             'hn_female_hachi_book_22k-vc' => 'HN – Hà Chi (22k, sách)',
+            'n_hanoi_female_nguyetnga2_book_vc' => 'HN – Nguyệt Nga Podcast (sách)',
         ],
         'male' => [
             'sg_male_trungkien_vdts_48k-fhg' => 'SG – Trung Kiên (48k)',
@@ -110,6 +111,10 @@ class TTSService
             'hn_male_phuthang_stor80dt_48k-fhg' => 'HN – Anh Khôi (48k, kể chuyện)',
             'sg_male_chidat_ebook_48k-phg' => 'SG – Chí Đạt (48k, ebook)',
             'hn_male_vietbach_child_22k-vc' => 'HN – Việt Bách (22k, trẻ em)',
+            's_sg_male_thientam_ytstable_vc' => 'SG – Thiện Tâm (YT)',
+            'n_hn_male_ngankechuyen_ytstable_vc' => 'HN – Ngạn Kể Chuyện (YT)',
+            'n_hn_male_duyonyx_oaistable_vc' => 'HN – Duy Onyx (OAI)',
+            'n_hanoi_male_baotrungmc_news_vc' => 'HN – Bảo Trung MC (tin tức)',
         ],
     ];
 
@@ -241,10 +246,12 @@ class TTSService
         ?string $voiceName = null,
         string $provider = 'google',
         ?string $styleInstruction = null,
-        ?int $projectId = null
+        ?int $projectId = null,
+        float $speed = 1.0
     ): string {
         try {
             $provider = strtolower($provider);
+            $speed = max(0.5, min(2.0, $speed)); // Clamp speed between 0.5 and 2.0
 
             // Prepend style instruction to text for Gemini TTS (and other providers if needed)
             $finalText = $text;
@@ -258,7 +265,8 @@ class TTSService
                 'voice_gender' => $voiceGender,
                 'voice_name' => $voiceName,
                 'text_length' => strlen($finalText),
-                'has_style_instruction' => !empty($styleInstruction)
+                'has_style_instruction' => !empty($styleInstruction),
+                'speed' => $speed
             ]);
 
             if ($provider === 'openai') {
@@ -266,7 +274,7 @@ class TTSService
                 $apiKey = env('OPENAI_API_KEY');
 
                 if ($apiKey) {
-                    return $this->generateWithOpenAIDirectTTS($finalText, $index, $voiceGender, $voiceName, $apiKey, $projectId);
+                    return $this->generateWithOpenAIDirectTTS($finalText, $index, $voiceGender, $voiceName, $apiKey, $projectId, $speed);
                 }
 
                 throw new Exception('Missing OPENAI_API_KEY for OpenAI TTS. Please set OPENAI_API_KEY in .env');
@@ -280,7 +288,7 @@ class TTSService
                 return $this->generateWithGeminiTTS($finalText, $index, $voiceGender, $voiceName, $geminiApiKey, $projectId);
             } elseif ($provider === 'microsoft') {
                 // Use local edge-tts (no API key needed)
-                return $this->generateWithEdgeTTS($finalText, $index, $voiceGender, $voiceName, $projectId);
+                return $this->generateWithEdgeTTS($finalText, $index, $voiceGender, $voiceName, $projectId, $speed);
             } elseif ($provider === 'vbee') {
                 $vbeeAppId = env('VBEE_TTS_APP_ID');
                 $vbeeToken = env('VBEE_TTS_TOKEN');
@@ -289,11 +297,11 @@ class TTSService
                     throw new Exception('Missing VBEE_TTS_APP_ID or VBEE_TTS_TOKEN. Please set both in .env');
                 }
 
-                return $this->generateWithVbeeTTS($text, $index, $voiceGender, $voiceName, $vbeeAppId, $vbeeToken, $projectId);
+                return $this->generateWithVbeeTTS($text, $index, $voiceGender, $voiceName, $vbeeAppId, $vbeeToken, $projectId, $speed);
             } else {
                 $apiKey = env('GOOGLE_TTS_API_KEY');
                 if ($apiKey) {
-                    return $this->generateWithGoogleTTS($finalText, $index, $voiceGender, $voiceName, $apiKey, $projectId);
+                    return $this->generateWithGoogleTTS($finalText, $index, $voiceGender, $voiceName, $apiKey, $projectId, $speed);
                 }
             }
 
@@ -310,7 +318,7 @@ class TTSService
     /**
      * Generate audio using Google Cloud TTS
      */
-    private function generateWithGoogleTTS(string $text, int $index, string $voiceGender, ?string $voiceName, string $apiKey, ?int $projectId = null): string
+    private function generateWithGoogleTTS(string $text, int $index, string $voiceGender, ?string $voiceName, string $apiKey, ?int $projectId = null, float $speed = 1.0): string
     {
         $url = "https://texttospeech.googleapis.com/v1/text:synthesize?key=" . $apiKey;
 
@@ -335,7 +343,7 @@ class TTSService
             ],
             'audioConfig' => [
                 'audioEncoding' => 'MP3',
-                'speakingRate' => 1.0,
+                'speakingRate' => $speed,
                 'pitch' => 0.0
             ]
         ];
@@ -492,7 +500,8 @@ class TTSService
         string $voiceGender,
         ?string $voiceName,
         string $apiKey,
-        ?int $projectId = null
+        ?int $projectId = null,
+        float $speed = 1.0
     ): string {
         $selectedVoice = $this->resolveOpenAIVoice($voiceGender, $voiceName);
         $url = "https://api.openai.com/v1/audio/speech";
@@ -501,7 +510,8 @@ class TTSService
             'model' => 'tts-1-hd',
             'input' => $text,
             'voice' => $selectedVoice,
-            'response_format' => 'mp3'
+            'response_format' => 'mp3',
+            'speed' => $speed
         ];
 
         Log::info('OpenAI Direct TTS Request', [
@@ -607,7 +617,8 @@ class TTSService
         int $index,
         string $voiceGender,
         ?string $voiceName,
-        ?int $projectId = null
+        ?int $projectId = null,
+        float $speed = 1.0
     ): string {
         // Resolve voice name
         $selectedVoice = $voiceName;
@@ -632,8 +643,12 @@ class TTSService
         // Escape text for command line
         $escapedText = str_replace(['"', "\n", "\r"], ['\\"', ' ', ' '], $text);
 
+        // Convert speed to edge-tts rate format (e.g., 0.8 → "-20%", 1.2 → "+20%")
+        $ratePercent = round(($speed - 1.0) * 100);
+        $rateStr = ($ratePercent >= 0 ? '+' : '') . $ratePercent . '%';
+
         // Build command
-        $command = "\"{$pythonPath}\" \"{$scriptPath}\" --text \"{$escapedText}\" --out \"{$outputPath}\" --voice \"{$selectedVoice}\" 2>&1";
+        $command = "\"{$pythonPath}\" \"{$scriptPath}\" --text \"{$escapedText}\" --out \"{$outputPath}\" --voice \"{$selectedVoice}\" --rate \"{$rateStr}\" 2>&1";
 
         Log::info('Edge TTS Command', [
             'voice' => $selectedVoice,
@@ -854,6 +869,8 @@ class TTSService
 
     /**
      * Generate audio using Vbee TTS API (async → poll → download)
+     * Retries up to 2 times on transient FAILURE.
+     * On "hate speech" rejection, uses AI to rewrite text and retries.
      */
     private function generateWithVbeeTTS(
         string $text,
@@ -862,7 +879,138 @@ class TTSService
         ?string $voiceName,
         string $appId,
         string $token,
-        ?int $projectId = null
+        ?int $projectId = null,
+        float $speed = 1.0
+    ): string {
+        $maxRetries = 2;
+        $lastException = null;
+        $currentText = $text;
+
+        for ($retry = 0; $retry <= $maxRetries; $retry++) {
+            try {
+                if ($retry > 0) {
+                    Log::info('Vbee TTS: Retry attempt', ['retry' => $retry, 'index' => $index]);
+                    sleep(5 * $retry); // backoff: 5s, 10s
+                }
+                return $this->doVbeeTTSRequest($currentText, $index, $voiceGender, $voiceName, $appId, $token, $projectId, $speed);
+            } catch (Exception $e) {
+                $lastException = $e;
+
+                // On hate speech rejection → AI rewrite then retry
+                if (str_contains($e->getMessage(), 'hate speech')) {
+                    Log::info('Vbee TTS: Hate speech detected, attempting AI rewrite', [
+                        'index' => $index,
+                        'text_length' => mb_strlen($currentText),
+                    ]);
+                    $rewritten = $this->rewriteForTTS($currentText);
+                    if ($rewritten && $rewritten !== $currentText) {
+                        Log::info('Vbee TTS: Text rewritten by AI', [
+                            'index' => $index,
+                            'original_length' => mb_strlen($currentText),
+                            'rewritten_length' => mb_strlen($rewritten),
+                        ]);
+                        $currentText = $rewritten;
+                        continue; // retry with rewritten text
+                    }
+                    Log::warning('Vbee TTS: AI rewrite returned no change, giving up');
+                    throw $e;
+                }
+
+                // Other submit errors — don't retry
+                if (str_contains($e->getMessage(), 'submit failed')) {
+                    throw $e;
+                }
+
+                Log::warning('Vbee TTS: Attempt failed', [
+                    'retry' => $retry,
+                    'index' => $index,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        throw $lastException;
+    }
+
+    /**
+     * Use AI (Gemini) to rewrite text that was flagged as sensitive by Vbee.
+     * Keeps the same meaning but replaces violent/sensitive words with softer alternatives.
+     */
+    private function rewriteForTTS(string $text): ?string
+    {
+        $apiKey = env('GEMINI_API_KEY');
+        if (!$apiKey) {
+            Log::warning('Vbee TTS rewrite: No GEMINI_API_KEY configured');
+            return null;
+        }
+
+        try {
+            $client = new \GuzzleHttp\Client();
+
+            $prompt = <<<PROMPT
+Bạn là chuyên gia viết lại văn bản tiếng Việt cho hệ thống text-to-speech.
+
+Văn bản dưới đây bị hệ thống TTS từ chối vì chứa nội dung nhạy cảm (bạo lực, thù hận, v.v.).
+
+YÊU CẦU:
+- Viết lại văn bản để giữ nguyên ý nghĩa câu chuyện nhưng dùng ngôn từ nhẹ nhàng hơn
+- Thay thế các từ bạo lực, nhạy cảm bằng cách diễn đạt gián tiếp hoặc uyển chuyển hơn
+- Ví dụ: "giết" → "hại", "chém" → "tấn công", "máu" → "vết thương", "chết" → "qua đời/ra đi", "đâm" → "làm tổn thương"
+- KHÔNG thay đổi cấu trúc câu chuyện, tên nhân vật, hoặc bối cảnh
+- KHÔNG thêm hoặc bớt thông tin
+- Giữ nguyên độ dài tương đương
+- CHỈ trả về văn bản đã viết lại, không thêm giải thích
+
+VĂN BẢN GỐC:
+{$text}
+PROMPT;
+
+            $response = $client->post(
+                'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' . $apiKey,
+                [
+                    'json' => [
+                        'contents' => [
+                            ['parts' => [['text' => $prompt]]]
+                        ],
+                        'generationConfig' => [
+                            'temperature' => 0.3,
+                            'maxOutputTokens' => 8192,
+                        ],
+                    ],
+                    'timeout' => 60,
+                ]
+            );
+
+            $body = json_decode($response->getBody()->getContents(), true);
+            $rewritten = $body['candidates'][0]['content']['parts'][0]['text'] ?? null;
+
+            if ($rewritten) {
+                $rewritten = trim($rewritten);
+                Log::info('Vbee TTS rewrite: Success', [
+                    'original_preview' => mb_substr($text, 0, 100),
+                    'rewritten_preview' => mb_substr($rewritten, 0, 100),
+                ]);
+            }
+
+            return $rewritten;
+        } catch (\Throwable $e) {
+            Log::error('Vbee TTS rewrite: AI rewrite failed', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    /**
+     * Single attempt to generate audio via Vbee TTS API
+     */
+    private function doVbeeTTSRequest(
+        string $text,
+        int $index,
+        string $voiceGender,
+        ?string $voiceName,
+        string $appId,
+        string $token,
+        ?int $projectId = null,
+        float $speed = 1.0
     ): string {
         $voiceCode = $this->resolveVbeeVoice($voiceGender, $voiceName);
 
@@ -889,7 +1037,7 @@ class TTSService
                 'voice_code'    => $voiceCode,
                 'audio_type'    => 'mp3',
                 'bitrate'       => 128,
-                'speed_rate'    => '1.0',
+                'speed_rate'    => (string) $speed,
             ],
             'timeout' => 30,
         ]);
@@ -911,15 +1059,26 @@ class TTSService
         // Step 2: Poll for completion (max ~3 minutes)
         $audioLink = null;
         $maxAttempts = 60; // 60 × 3s = 180s
+        $pollInterval = 3;
         for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
-            sleep(3);
+            sleep($pollInterval);
 
-            $pollResp = $client->get("https://vbee.vn/api/v1/tts/{$requestId}", [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $token,
-                ],
-                'timeout' => 15,
-            ]);
+            try {
+                $pollResp = $client->get("https://vbee.vn/api/v1/tts/{$requestId}", [
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $token,
+                    ],
+                    'timeout' => 15,
+                ]);
+            } catch (\Throwable $pollEx) {
+                Log::warning('Vbee TTS: Poll request error', [
+                    'attempt' => $attempt + 1,
+                    'request_id' => $requestId,
+                    'error' => $pollEx->getMessage(),
+                ]);
+                // Network error during poll — continue retrying
+                continue;
+            }
 
             $pollBody = json_decode($pollResp->getBody()->getContents(), true);
             $status = $pollBody['result']['status'] ?? '';
@@ -928,15 +1087,25 @@ class TTSService
                 $audioLink = $pollBody['result']['audio_link'] ?? null;
                 break;
             } elseif ($status === 'FAILURE') {
-                throw new Exception('Vbee TTS failed for request ' . $requestId);
+                $errorMsg = $pollBody['result']['error_message']
+                    ?? $pollBody['error_message']
+                    ?? json_encode($pollBody['result'] ?? $pollBody);
+                Log::error('Vbee TTS: FAILURE response', [
+                    'request_id' => $requestId,
+                    'error_message' => $errorMsg,
+                    'full_response' => $pollBody,
+                ]);
+                throw new Exception('Vbee TTS failed for request ' . $requestId . ': ' . $errorMsg);
             }
 
             // IN_PROGRESS — keep polling
-            Log::debug('Vbee TTS: Polling', ['attempt' => $attempt + 1, 'status' => $status]);
+            if ($attempt % 5 === 0) {
+                Log::debug('Vbee TTS: Polling', ['attempt' => $attempt + 1, 'status' => $status, 'request_id' => $requestId]);
+            }
         }
 
         if (!$audioLink) {
-            throw new Exception('Vbee TTS: Timeout waiting for audio (request ' . $requestId . ')');
+            throw new Exception('Vbee TTS: Timeout waiting for audio after ' . ($maxAttempts * $pollInterval) . 's (request ' . $requestId . ')');
         }
 
         Log::info('Vbee TTS: Audio ready', ['audio_link' => $audioLink]);

@@ -11,6 +11,7 @@ class YoutubeChannel extends Model
 
     protected $fillable = [
         'channel_id',
+        'content_type',
         'title',
         'custom_url',
         'description',
@@ -89,5 +90,42 @@ class YoutubeChannel extends Model
     public function audioBooks()
     {
         return $this->hasMany(AudioBook::class, 'youtube_channel_id');
+    }
+
+    /**
+     * Check if this is an audiobook channel.
+     */
+    public function isAudiobookChannel(): bool
+    {
+        return $this->content_type === 'audiobook';
+    }
+
+    /**
+     * Check if this is a dub (lồng tiếng) channel.
+     */
+    public function isDubChannel(): bool
+    {
+        return $this->content_type === 'dub';
+    }
+
+    /**
+     * Check if this is a self-creative channel.
+     */
+    public function isSelfCreativeChannel(): bool
+    {
+        return $this->content_type === 'self_creative';
+    }
+
+    /**
+     * Get the content type display name.
+     */
+    public function getContentTypeNameAttribute(): ?string
+    {
+        return match ($this->content_type) {
+            'audiobook' => 'Audiobook',
+            'dub' => 'Dub (Lồng tiếng)',
+            'self_creative' => 'Self Creative',
+            default => null,
+        };
     }
 }

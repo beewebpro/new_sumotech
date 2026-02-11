@@ -37,6 +37,7 @@ class YouTubeChannelController extends Controller
     {
         $validated = $request->validate([
             'channel_id' => 'required|string|max:255|unique:youtube_channels,channel_id',
+            'content_type' => 'required|in:audiobook,dub,self_creative',
             'title' => 'required|string|max:255',
             'custom_url' => 'nullable|string|max:255',
             'description' => 'nullable|string',
@@ -114,6 +115,7 @@ class YouTubeChannelController extends Controller
     {
         $validated = $request->validate([
             'channel_id' => 'required|string|max:255|unique:youtube_channels,channel_id,' . $youtubeChannel->id,
+            'content_type' => 'required|in:audiobook,dub,self_creative',
             'title' => 'required|string|max:255',
             'custom_url' => 'nullable|string|max:255',
             'description' => 'nullable|string',
@@ -127,6 +129,13 @@ class YouTubeChannelController extends Controller
             'ref_channels_json' => 'nullable|string',
         ]);
 
+        // Prevent changing content_type once it's set
+        if ($youtubeChannel->content_type && $validated['content_type'] !== $youtubeChannel->content_type) {
+            return back()->withErrors([
+                'content_type' => 'Không thể thay đổi loại nội dung sau khi đã được thiết lập.'
+            ])->withInput();
+        }
+
         if ($request->hasFile('thumbnail_file')) {
             $validated['thumbnail_url'] = $request->file('thumbnail_file')
                 ->store('youtube_channels', 'public');
@@ -136,7 +145,7 @@ class YouTubeChannelController extends Controller
 
         $this->syncReferenceChannels($youtubeChannel, $request->input('ref_channels_json'));
 
-        return redirect()->route('youtube-channels.index')->with('success', 'Channel updated successfully.');
+        return redirect()->route('youtube-channels.edit', $youtubeChannel)->with('success', 'Cập nhật kênh thành công!');
     }
 
     public function destroy(YoutubeChannel $youtubeChannel)
@@ -148,6 +157,14 @@ class YouTubeChannelController extends Controller
 
     public function storeReference(Request $request, YoutubeChannel $youtubeChannel)
     {
+        // Only allow adding reference channels for dub channels
+        if ($youtubeChannel->content_type !== 'dub') {
+            return response()->json([
+                'success' => false,
+                'error' => 'Reference channels chỉ áp dụng cho kênh Dub (Lồng tiếng).'
+            ], 400);
+        }
+
         $validated = $request->validate([
             'ref_channel_url' => 'required|url|max:2048',
             'ref_channel_id' => 'nullable|string|max:255',
@@ -204,6 +221,12 @@ class YouTubeChannelController extends Controller
 
     public function fetchReferenceVideos(Request $request, YoutubeChannel $youtubeChannel)
     {
+        // Only allow fetching for dub channels
+        if ($youtubeChannel->content_type !== 'dub') {
+            return redirect()->route('youtube-channels.show', $youtubeChannel)
+                ->with('error', 'Chức năng Fetch video chỉ áp dụng cho kênh Dub (Lồng tiếng).');
+        }
+
         $apiKey = config('services.youtube.api_key');
         if (!$apiKey) {
             return redirect()->route('youtube-channels.show', $youtubeChannel)
@@ -287,6 +310,13 @@ class YouTubeChannelController extends Controller
 
     private function syncReferenceChannels(YoutubeChannel $channel, ?string $refsJson): void
     {
+        // Only sync reference channels for dub channels
+        if ($channel->content_type !== 'dub') {
+            // Delete any existing references if channel type is not dub
+            $channel->referenceChannels()->delete();
+            return;
+        }
+
         $channel->referenceChannels()->delete();
 
         if (!$refsJson) {

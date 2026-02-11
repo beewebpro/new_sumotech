@@ -30,6 +30,8 @@ class AudioBook extends Model
         'tts_voice_gender',
         'tts_voice_name',
         'tts_style_instruction',
+        'tts_speed',
+        'pause_between_chunks',
         'intro_music',
         'outro_music',
         'outro_use_intro',
@@ -41,7 +43,12 @@ class AudioBook extends Model
         'wave_position',
         'wave_height',
         'wave_color',
-        'wave_opacity'
+        'wave_opacity',
+        'youtube_playlist_id',
+        'youtube_playlist_title',
+        'youtube_video_title',
+        'youtube_video_description',
+        'youtube_video_tags'
     ];
 
     protected $casts = [

@@ -101,10 +101,30 @@ class AudioBookChapterController extends Controller
 
         // If content changed, re-split into chunks
         if ($data['content'] !== $chapter->content) {
-            // Delete old chunks
+            // Delete old chunks and their audio files
+            foreach ($chapter->chunks as $oldChunk) {
+                if ($oldChunk->audio_file) {
+                    $filePath = storage_path('app/public/' . $oldChunk->audio_file);
+                    if (file_exists($filePath)) {
+                        unlink($filePath);
+                    }
+                }
+            }
             $chapter->chunks()->delete();
 
-            // Create new chunks
+            // Also delete merged audio file if it exists
+            if ($chapter->audio_file) {
+                $mergedPath = storage_path('app/public/' . $chapter->audio_file);
+                if (file_exists($mergedPath)) {
+                    unlink($mergedPath);
+                }
+                $data['audio_file'] = null;
+            }
+
+            // Update content on model BEFORE splitting so splitIntoChunks reads new content
+            $chapter->content = $data['content'];
+
+            // Create new chunks from NEW content
             $chunks = $chapter->splitIntoChunks(1000);
             $data['total_chunks'] = count($chunks);
 
@@ -142,11 +162,38 @@ class AudioBookChapterController extends Controller
      */
     public function generateTts(AudioBook $audioBook, AudioBookChapter $chapter)
     {
+        // Re-read chapter content from DB to ensure we have the latest
+        $chapter->refresh();
+
         $chapter->status = 'processing';
         $chapter->save();
 
+        // Check if existing chunks match current content
+        $existingChunks = $chapter->chunks()->orderBy('chunk_number')->get();
+        $needsRechunk = $existingChunks->isEmpty();
+
+        if (!$needsRechunk) {
+            $existingText = $existingChunks->pluck('text_content')->implode("\n\n");
+            if (trim($chapter->content) !== trim($existingText)) {
+                // Content changed — delete old chunks and re-create
+                $chapter->chunks()->delete();
+                $chunks = $chapter->splitIntoChunks(1000);
+                $chapter->total_chunks = count($chunks);
+                $chapter->save();
+
+                foreach ($chunks as $index => $chunkText) {
+                    AudioBookChapterChunk::create([
+                        'audiobook_chapter_id' => $chapter->id,
+                        'chunk_number' => $index + 1,
+                        'text_content' => $chunkText,
+                        'status' => 'pending'
+                    ]);
+                }
+            }
+        }
+
         // Process each chunk
-        foreach ($chapter->chunks as $chunk) {
+        foreach ($chapter->chunks()->orderBy('chunk_number')->get() as $chunk) {
             try {
                 $this->generateChunkAudio($chunk, $chapter);
             } catch (\Exception $e) {
@@ -228,26 +275,78 @@ class AudioBookChapterController extends Controller
                 'provider' => 'required|string|in:openai,gemini,microsoft,vbee',
                 'voice_name' => 'required|string',
                 'voice_gender' => 'nullable|string|in:male,female',
-                'style_instruction' => 'nullable|string'
+                'style_instruction' => 'nullable|string',
+                'tts_speed' => 'nullable|numeric|between:0.5,2.0',
+                'pause_between_chunks' => 'nullable|numeric|between:0,5'
             ]);
 
             // Update audiobook TTS settings
-            $audioBook->update([
+            $updateData = [
                 'tts_provider' => $request->provider,
                 'tts_voice_name' => $request->voice_name,
                 'tts_voice_gender' => $request->voice_gender ?? 'female',
                 'tts_style_instruction' => $request->style_instruction
-            ]);
+            ];
+            if ($request->has('tts_speed')) {
+                $updateData['tts_speed'] = $request->tts_speed;
+            }
+            if ($request->has('pause_between_chunks')) {
+                $updateData['pause_between_chunks'] = $request->pause_between_chunks;
+            }
+            $audioBook->update($updateData);
 
             // Update chapter voice
             $chapter->tts_voice = $request->voice_name;
             $chapter->save();
 
-            // Check existing chunks
-            $existingChunks = $chapter->chunks()->get();
+            // Re-read chapter content from DB to ensure we have the latest
+            $chapter->refresh();
 
-            // If no chunks exist, create them
-            if ($existingChunks->isEmpty()) {
+            // Check existing chunks
+            $existingChunks = $chapter->chunks()->orderBy('chunk_number')->get();
+
+            // Determine if chunks need to be recreated:
+            // 1. No chunks exist yet
+            // 2. Chapter content has changed since chunks were created
+            $needsRechunk = $existingChunks->isEmpty();
+
+            if (!$needsRechunk && !$existingChunks->isEmpty()) {
+                // Reconstruct text from existing chunks and compare with current content
+                $existingText = $existingChunks->pluck('text_content')->implode("\n\n");
+                $currentContent = trim($chapter->content);
+                $existingTextNormalized = trim($existingText);
+
+                // Compare normalized versions (ignore minor whitespace differences)
+                if ($currentContent !== $existingTextNormalized) {
+                    Log::info("Chapter {$chapter->id} content changed since chunks were created. Re-chunking.", [
+                        'existing_text_length' => mb_strlen($existingTextNormalized),
+                        'current_content_length' => mb_strlen($currentContent),
+                    ]);
+                    $needsRechunk = true;
+                }
+            }
+
+            if ($needsRechunk) {
+                // Delete old chunks (and their audio files) before re-creating
+                foreach ($existingChunks as $oldChunk) {
+                    if ($oldChunk->audio_file) {
+                        $filePath = storage_path('app/public/' . $oldChunk->audio_file);
+                        if (file_exists($filePath)) {
+                            unlink($filePath);
+                        }
+                    }
+                }
+                $chapter->chunks()->delete();
+
+                // Also delete merged audio file if it exists
+                if ($chapter->audio_file) {
+                    $mergedPath = storage_path('app/public/' . $chapter->audio_file);
+                    if (file_exists($mergedPath)) {
+                        unlink($mergedPath);
+                    }
+                    $chapter->audio_file = null;
+                }
+
                 $content = $chapter->content;
                 $chunksText = $this->chunkContent($content, 2000);
 
@@ -502,18 +601,27 @@ class AudioBookChapterController extends Controller
                 'provider' => 'required|string|in:openai,gemini,microsoft,vbee',
                 'voice_name' => 'required|string',
                 'voice_gender' => 'nullable|string|in:male,female',
-                'style_instruction' => 'nullable|string'
+                'style_instruction' => 'nullable|string',
+                'tts_speed' => 'nullable|numeric|between:0.5,2.0',
+                'pause_between_chunks' => 'nullable|numeric|between:0,5'
             ]);
 
             Log::info("Starting TTS chunk generation for chapter {$chapter->id}");
 
             // Update audiobook TTS settings
-            $audioBook->update([
+            $updateData = [
                 'tts_provider' => $request->provider,
                 'tts_voice_name' => $request->voice_name,
                 'tts_voice_gender' => $request->voice_gender ?? 'female',
                 'tts_style_instruction' => $request->style_instruction
-            ]);
+            ];
+            if ($request->has('tts_speed')) {
+                $updateData['tts_speed'] = $request->tts_speed;
+            }
+            if ($request->has('pause_between_chunks')) {
+                $updateData['pause_between_chunks'] = $request->pause_between_chunks;
+            }
+            $audioBook->update($updateData);
 
             // Set chapter to processing
             $chapter->status = 'processing';
@@ -712,6 +820,9 @@ class AudioBookChapterController extends Controller
         // Build the text content with intro/outro
         $textContent = $this->buildChunkTextWithIntroOutro($chunk, $chapter, $audioBook, $totalChunks);
 
+        // Get TTS speed from audiobook settings
+        $ttsSpeed = (float) ($audioBook->tts_speed ?? 1.0);
+
         // Use TTSService - $index parameter is just for filename uniqueness
         $audioPath = $this->ttsService->generateAudio(
             $textContent,
@@ -720,7 +831,8 @@ class AudioBookChapterController extends Controller
             $request->voice_name,
             $request->provider,
             $styleInstruction,
-            null // projectId
+            null, // projectId
+            $ttsSpeed
         );
 
         // Save to storage/books/{book_id}/c_{chapter}_{chunk}_{timestamp}.mp3
@@ -889,21 +1001,44 @@ class AudioBookChapterController extends Controller
                 mkdir($outputDir, 0755, true);
             }
 
+            // Generate silence file if pause_between_chunks > 0
+            $pauseDuration = (float) ($audioBook->pause_between_chunks ?? 1.0);
+            $silenceFile = null;
+            if ($pauseDuration > 0) {
+                $silenceFile = $outputDir . DIRECTORY_SEPARATOR . "silence_{$chapterNum}.mp3";
+                $silenceCmd = "ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t {$pauseDuration} -q:a 9 \"{$silenceFile}\" 2>&1";
+                exec($silenceCmd, $silenceOutput, $silenceReturnCode);
+                if ($silenceReturnCode !== 0 || !file_exists($silenceFile)) {
+                    Log::warning("Failed to create silence file", ['output' => $silenceOutput]);
+                    $silenceFile = null;
+                }
+            }
+
             // Create list file for ffmpeg concat
             $listFile = $outputDir . DIRECTORY_SEPARATOR . "concat_list_{$chapterNum}.txt";
             $listContent = "";
 
+            $chunkCount = 0;
+            $totalChunkCount = $chunks->count();
             foreach ($chunks as $chunk) {
                 $chunkPath = storage_path('app/public/' . $chunk->audio_file);
                 if (file_exists($chunkPath)) {
+                    $chunkCount++;
                     // Use forward slashes and escape single quotes for ffmpeg
                     $escapedPath = str_replace("'", "'\\''", str_replace('\\', '/', $chunkPath));
                     $listContent .= "file '{$escapedPath}'\n";
+
+                    // Add silence between chunks (not after the last one)
+                    if ($silenceFile && $chunkCount < $totalChunkCount) {
+                        $escapedSilence = str_replace("'", "'\\''", str_replace('\\', '/', $silenceFile));
+                        $listContent .= "file '{$escapedSilence}'\n";
+                    }
                 }
             }
 
             if (empty($listContent)) {
                 Log::warning("No valid audio files to merge for chapter {$chapter->id}");
+                if ($silenceFile && file_exists($silenceFile)) unlink($silenceFile);
                 return null;
             }
 
@@ -929,9 +1064,12 @@ class AudioBookChapterController extends Controller
 
             exec($command, $output, $returnCode);
 
-            // Clean up list file
+            // Clean up list file and silence file
             if (file_exists($listFile)) {
                 unlink($listFile);
+            }
+            if ($silenceFile && file_exists($silenceFile)) {
+                unlink($silenceFile);
             }
 
             if ($returnCode !== 0 || !file_exists($voiceOnlyPath)) {

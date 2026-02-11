@@ -58,6 +58,40 @@
                             <div class="flex-1">
                                 <h3 class="text-lg font-semibold text-gray-900">{{ $youtubeChannel->title }}</h3>
                                 <p class="text-sm text-gray-600 mt-1">Channel ID: {{ $youtubeChannel->channel_id }}</p>
+
+                                {{-- Content Type Badge --}}
+                                <div class="mt-2">
+                                    @if($youtubeChannel->content_type === 'audiobook')
+                                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-100 text-green-700 text-sm font-medium rounded-lg">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                            </svg>
+                                            Audiobook Channel
+                                        </span>
+                                    @elseif($youtubeChannel->content_type === 'dub')
+                                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 text-purple-700 text-sm font-medium rounded-lg">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            </svg>
+                                            Dub (Lồng tiếng) Channel
+                                        </span>
+                                    @elseif($youtubeChannel->content_type === 'self_creative')
+                                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-100 text-orange-700 text-sm font-medium rounded-lg">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                            </svg>
+                                            Self Creative Channel
+                                        </span>
+                                    @else
+                                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                            </svg>
+                                            Content Type Not Set
+                                        </span>
+                                    @endif
+                                </div>
+
                                 @if ($youtubeChannel->channel_url)
                                     <a href="{{ $youtubeChannel->channel_url }}" target="_blank"
                                         class="text-xs text-red-600 hover:text-red-700 break-words">Open channel</a>
@@ -102,21 +136,28 @@
                     <div class="p-6 text-gray-900">
                         <div class="border-b border-gray-200 mb-4">
                             <nav class="-mb-px flex gap-6" aria-label="Tabs">
-                                <button id="tabDubsyncBtn"
-                                    class="tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
-                                    Lồng tiếng
-                                </button>
-                                <button id="tabAudiobooksBtn"
-                                    class="tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
-                                    Audio books
-                                </button>
-                                <button id="tabSpeakersBtn"
-                                    class="tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
-                                    🎙️ MC / Speakers
-                                </button>
+                                @if($youtubeChannel->content_type === 'dub')
+                                    <button id="tabDubsyncBtn"
+                                        class="tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                                        📺 Lồng tiếng
+                                    </button>
+                                @endif
+                                @if($youtubeChannel->content_type === 'audiobook')
+                                    <button id="tabAudiobooksBtn"
+                                        class="tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                                        📚 Audio books
+                                    </button>
+                                @endif
+                                @if($youtubeChannel->content_type === 'self_creative')
+                                    <button id="tabSelfCreativeBtn"
+                                        class="tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
+                                        ✨ Nội dung sáng tạo
+                                    </button>
+                                @endif
                             </nav>
                         </div>
 
+                        @if($youtubeChannel->content_type === 'dub')
                         <div id="tabDubsync" class="tab-content">
                             <div class="flex items-center justify-between mb-4">
                                 <h3 class="text-lg font-semibold">Lồng tiếng</h3>
@@ -131,14 +172,16 @@
                                         disabled>
                                         Delete selected
                                     </button>
-                                    <form action="{{ route('youtube-channels.fetch.videos', $youtubeChannel) }}"
-                                        method="POST">
-                                        @csrf
-                                        <button type="submit"
-                                            class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
-                                            Fetch video
-                                        </button>
-                                    </form>
+                                    @if($youtubeChannel->content_type === 'dub')
+                                        <form action="{{ route('youtube-channels.fetch.videos', $youtubeChannel) }}"
+                                            method="POST">
+                                            @csrf
+                                            <button type="submit"
+                                                class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
+                                                Fetch video
+                                            </button>
+                                        </form>
+                                    @endif
                                     <button id="newVideoBtnInline"
                                         class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
                                         + New Video
@@ -364,63 +407,73 @@
                                 </div>
                             @endif
 
-                            <!-- Reference Channels Section -->
-                            <div class="mt-8 pt-8 border-t border-gray-200">
-                                <div class="flex items-center justify-between mb-4">
-                                    <h3 class="text-lg font-semibold">Reference Channels</h3>
-                                    <a href="{{ route('youtube-channels.edit', $youtubeChannel) }}"
-                                        class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg transition duration-200">
-                                        Manage
-                                    </a>
-                                </div>
-
-                                @if ($referenceChannels->count() === 0)
-                                    <div class="text-center py-8 text-gray-600">No reference channels yet.</div>
-                                @else
-                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        @foreach ($referenceChannels as $ref)
-                                            <div class="flex items-center gap-4 p-4 border border-gray-200 rounded-lg">
-                                                <div class="flex-shrink-0">
-                                                    @if ($ref->ref_thumbnail_url)
-                                                        <img src="{{ $ref->ref_thumbnail_url }}" alt="Thumbnail"
-                                                            class="w-14 h-14 rounded-full object-cover border">
-                                                    @else
-                                                        <div
-                                                            class="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
-                                                            <i class="ri-youtube-line"></i>
-                                                        </div>
-                                                    @endif
-                                                </div>
-                                                <div class="min-w-0 flex-1">
-                                                    <div class="text-sm font-semibold text-gray-900 truncate">
-                                                        {{ $ref->ref_title ?? 'Untitled Channel' }}
-                                                    </div>
-                                                    <div class="text-xs text-gray-500">{{ $ref->ref_channel_id ?? '—' }}
-                                                    </div>
-                                                    <div class="text-xs text-gray-400 truncate">
-                                                        {{ $ref->ref_channel_url }}
-                                                    </div>
-                                                    @if ($ref->ref_description)
-                                                        <div class="text-xs text-gray-600 mt-1 line-clamp-2">
-                                                            {{ $ref->ref_description }}
-                                                        </div>
-                                                    @endif
-                                                    <div class="text-xs text-gray-500 mt-1">
-                                                        Fetch every {{ $ref->fetch_interval_days ?? 7 }} day(s)
-                                                    </div>
-                                                </div>
-                                                <div class="flex-shrink-0">
-                                                    <a href="{{ $ref->ref_channel_url }}" target="_blank"
-                                                        class="text-xs text-red-600 hover:text-red-700">Open</a>
-                                                </div>
-                                            </div>
-                                        @endforeach
+                            <!-- Reference Channels Section (Only for Dub channels) -->
+                            @if($youtubeChannel->content_type === 'dub')
+                                <div class="mt-8 pt-8 border-t border-gray-200">
+                                    <div class="flex items-center justify-between mb-4">
+                                        <div>
+                                            <h3 class="text-lg font-semibold">Reference Channels</h3>
+                                            <p class="text-xs text-gray-500 mt-1">Kênh YouTube gốc để lấy video và lồng tiếng</p>
+                                        </div>
+                                        <a href="{{ route('youtube-channels.edit', $youtubeChannel) }}"
+                                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg transition duration-200">
+                                            Manage
+                                        </a>
                                     </div>
-                                @endif
-                            </div>
-                        </div>
 
-                        <div id="tabAudiobooks" class="tab-content hidden">
+                                    @if ($referenceChannels->count() === 0)
+                                        <div class="text-center py-8 bg-purple-50 rounded-lg border border-purple-100">
+                                            <div class="text-gray-600 mb-2">Chưa có reference channels.</div>
+                                            <p class="text-xs text-gray-500">Thêm kênh YouTube gốc để tự động lấy video cần lồng tiếng.</p>
+                                        </div>
+                                    @else
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            @foreach ($referenceChannels as $ref)
+                                                <div class="flex items-center gap-4 p-4 border border-gray-200 rounded-lg hover:border-purple-300 transition">
+                                                    <div class="flex-shrink-0">
+                                                        @if ($ref->ref_thumbnail_url)
+                                                            <img src="{{ $ref->ref_thumbnail_url }}" alt="Thumbnail"
+                                                                class="w-14 h-14 rounded-full object-cover border">
+                                                        @else
+                                                            <div
+                                                                class="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                                                                <i class="ri-youtube-line"></i>
+                                                            </div>
+                                                        @endif
+                                                    </div>
+                                                    <div class="min-w-0 flex-1">
+                                                        <div class="text-sm font-semibold text-gray-900 truncate">
+                                                            {{ $ref->ref_title ?? 'Untitled Channel' }}
+                                                        </div>
+                                                        <div class="text-xs text-gray-500">{{ $ref->ref_channel_id ?? '—' }}
+                                                        </div>
+                                                        <div class="text-xs text-gray-400 truncate">
+                                                            {{ $ref->ref_channel_url }}
+                                                        </div>
+                                                        @if ($ref->ref_description)
+                                                            <div class="text-xs text-gray-600 mt-1 line-clamp-2">
+                                                                {{ $ref->ref_description }}
+                                                            </div>
+                                                        @endif
+                                                        <div class="text-xs text-gray-500 mt-1">
+                                                            Fetch every {{ $ref->fetch_interval_days ?? 7 }} day(s)
+                                                        </div>
+                                                    </div>
+                                                    <div class="flex-shrink-0">
+                                                        <a href="{{ $ref->ref_channel_url }}" target="_blank"
+                                                            class="text-xs text-red-600 hover:text-red-700">Open</a>
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                </div>
+                            @endif
+                        </div>
+                        @endif
+
+                        @if($youtubeChannel->content_type === 'audiobook')
+                        <div id="tabAudiobooks" class="tab-content">
                             <div class="flex items-center justify-between mb-4">
                                 <h3 class="text-lg font-semibold">Audio books</h3>
                                 <a href="{{ route('audiobooks.create') }}?youtube_channel_id={{ $youtubeChannel->id }}"
@@ -481,174 +534,28 @@
                                 </div>
                             @endif
                         </div>
+                        @endif
 
-                        <!-- MC / Speakers Tab -->
-                        <div id="tabSpeakers" class="tab-content hidden">
+                        @if($youtubeChannel->content_type === 'self_creative')
+                        <!-- Self Creative Tab -->
+                        <div id="tabSelfCreative" class="tab-content">
                             <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-lg font-semibold">🎙️ MC / Speakers</h3>
-                                <button type="button" onclick="openSpeakerModal()"
-                                    class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
-                                    + Thêm MC
-                                </button>
+                                <h3 class="text-lg font-semibold">✨ Nội dung sáng tạo</h3>
+                                <a href="{{ route('youtube-channels.contents.create', $youtubeChannel) }}"
+                                    class="bg-orange-600 hover:bg-orange-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
+                                    + Tạo nội dung mới
+                                </a>
                             </div>
 
-                            <p class="text-sm text-gray-600 mb-4">
-                                MC là người thuyết minh cho kênh. Upload hình avatar hoặc hình khung cảnh để tạo speaker với
-                                hiệu ứng lip-sync (nhép miệng).
-                            </p>
-
-                            <div id="speakersContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                <div id="speakersLoading" class="col-span-full text-center py-8 text-gray-400">
-                                    <div
-                                        class="animate-spin inline-block w-6 h-6 border-2 border-gray-300 border-t-purple-600 rounded-full mr-2">
-                                    </div>
-                                    Đang tải...
-                                </div>
+                            <div class="text-center py-8 text-gray-600">
+                                <div class="text-4xl mb-4">✨</div>
+                                <p class="text-lg mb-2">Kênh Self Creative</p>
+                                <p class="text-sm text-gray-500">Tạo nội dung từ kịch bản của riêng bạn</p>
                             </div>
                         </div>
+                        @endif
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- Speaker Modal -->
-        <div id="speakerModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
-            <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 mx-4 max-h-[90vh] overflow-y-auto">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 id="speakerModalTitle" class="text-lg font-semibold">Thêm MC mới</h3>
-                    <button type="button" onclick="closeSpeakerModal()"
-                        class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
-                </div>
-
-                <form id="speakerForm" enctype="multipart/form-data">
-                    @csrf
-                    <input type="hidden" id="speakerId" name="speaker_id" value="">
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <!-- Left Column -->
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Tên MC <span
-                                        class="text-red-500">*</span></label>
-                                <input type="text" id="speakerName" name="name" required
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                    placeholder="VD: Minh Châu, MC Hương...">
-                            </div>
-
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Giới tính <span
-                                        class="text-red-500">*</span></label>
-                                <div class="flex gap-4">
-                                    <label class="inline-flex items-center gap-2 cursor-pointer">
-                                        <input type="radio" name="gender" value="female" checked
-                                            class="text-purple-600">
-                                        <span>👩 Nữ</span>
-                                    </label>
-                                    <label class="inline-flex items-center gap-2 cursor-pointer">
-                                        <input type="radio" name="gender" value="male" class="text-purple-600">
-                                        <span>👨 Nam</span>
-                                    </label>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Avatar / Hình đại diện</label>
-                                <input type="file" id="speakerAvatar" name="avatar" accept="image/*"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                                <p class="text-xs text-gray-500 mt-1">Ảnh chân dung hoặc hình khung cảnh cho lip-sync</p>
-                                <div id="speakerAvatarPreview" class="mt-2 hidden">
-                                    <img src="" alt="Preview" class="w-24 h-24 object-cover rounded-lg border">
-                                </div>
-                            </div>
-
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>
-                                <textarea id="speakerDescription" name="description" rows="2"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                    placeholder="Giọng nữ miền Nam ấm áp, phù hợp đọc truyện tình cảm..."></textarea>
-                            </div>
-                        </div>
-
-                        <!-- Right Column -->
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">TTS Provider mặc định</label>
-                                <select id="speakerVoiceProvider" name="default_voice_provider"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
-                                    <option value="">-- Chọn TTS Provider --</option>
-                                    <option value="openai">🤖 OpenAI TTS</option>
-                                    <option value="gemini">✨ Gemini Pro TTS</option>
-                                    <option value="microsoft">🪟 Microsoft TTS</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Tên giọng mặc định</label>
-                                <select id="speakerVoiceName" name="default_voice_name"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
-                                    <option value="">-- Chọn TTS Provider trước --</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Phong cách giọng nói</label>
-                                <textarea id="speakerVoiceStyle" name="voice_style" rows="2"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                                    placeholder="VD: Đọc với giọng ấm áp, chậm rãi, phong cách kể chuyện..."></textarea>
-                            </div>
-
-                            <!-- Lip Sync Settings -->
-                            <div class="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                                <label class="flex items-center gap-2 cursor-pointer mb-3">
-                                    <input type="checkbox" id="speakerLipSyncEnabled" name="lip_sync_enabled"
-                                        value="1" class="w-4 h-4 text-purple-600 rounded focus:ring-purple-500">
-                                    <span class="text-sm font-medium text-gray-700">🎬 Bật hiệu ứng nhép miệng
-                                        (Lip-sync)</span>
-                                </label>
-
-                                <div id="lipSyncSettings" class="hidden space-y-2">
-                                    <div class="flex items-center gap-2">
-                                        <label class="text-xs text-gray-600 w-24">Độ nhạy:</label>
-                                        <input type="range" id="lipSyncSensitivity"
-                                            name="lip_sync_settings[sensitivity]" min="0" max="1"
-                                            step="0.1" value="0.5" class="flex-1">
-                                        <span id="lipSyncSensitivityValue" class="text-xs text-gray-500 w-8">0.5</span>
-                                    </div>
-                                    <div class="flex items-center gap-2">
-                                        <label class="text-xs text-gray-600 w-24">Kiểu:</label>
-                                        <select name="lip_sync_settings[style]"
-                                            class="flex-1 px-2 py-1 border border-gray-300 rounded text-xs">
-                                            <option value="natural">Tự nhiên</option>
-                                            <option value="exaggerated">Phóng đại</option>
-                                            <option value="subtle">Tinh tế</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Hình ảnh bổ sung</label>
-                                <input type="file" id="speakerAdditionalImages" name="additional_images[]"
-                                    accept="image/*" multiple
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                                <p class="text-xs text-gray-500 mt-1">Các hình ảnh khác (pose khác, khung cảnh...)</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="speakerFormStatus" class="mt-4 text-sm"></div>
-
-                    <div class="flex gap-3 mt-6">
-                        <button type="submit" id="speakerSubmitBtn"
-                            class="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition">
-                            💾 Lưu MC
-                        </button>
-                        <button type="button" onclick="closeSpeakerModal()"
-                            class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition">
-                            Hủy
-                        </button>
-                    </div>
-                </form>
             </div>
         </div>
 
@@ -697,10 +604,10 @@
                 const closeBtn = document.getElementById('closeNewVideoModal');
                 const tabDubsyncBtn = document.getElementById('tabDubsyncBtn');
                 const tabAudiobooksBtn = document.getElementById('tabAudiobooksBtn');
-                const tabSpeakersBtn = document.getElementById('tabSpeakersBtn');
+                const tabSelfCreativeBtn = document.getElementById('tabSelfCreativeBtn');
                 const tabDubsync = document.getElementById('tabDubsync');
                 const tabAudiobooks = document.getElementById('tabAudiobooks');
-                const tabSpeakers = document.getElementById('tabSpeakers');
+                const tabSelfCreative = document.getElementById('tabSelfCreative');
 
                 const setActiveTab = (active) => {
                     const tabs = {
@@ -712,9 +619,9 @@
                             btn: tabAudiobooksBtn,
                             content: tabAudiobooks
                         },
-                        speakers: {
-                            btn: tabSpeakersBtn,
-                            content: tabSpeakers
+                        selfCreative: {
+                            btn: tabSelfCreativeBtn,
+                            content: tabSelfCreative
                         }
                     };
 
@@ -729,11 +636,6 @@
                             content.classList.remove('hidden');
                             btn.classList.add('border-red-600', 'text-gray-900');
                             btn.classList.remove('border-transparent', 'text-gray-500');
-
-                            // Load speakers when tab is opened
-                            if (key === 'speakers') {
-                                loadSpeakers();
-                            }
                         } else {
                             content.classList.add('hidden');
                             btn.classList.add('border-transparent', 'text-gray-500');
@@ -750,11 +652,19 @@
                     tabAudiobooksBtn.addEventListener('click', () => setActiveTab('audiobooks'));
                 }
 
-                if (tabSpeakersBtn) {
-                    tabSpeakersBtn.addEventListener('click', () => setActiveTab('speakers'));
+                if (tabSelfCreativeBtn) {
+                    tabSelfCreativeBtn.addEventListener('click', () => setActiveTab('selfCreative'));
                 }
 
-                setActiveTab('dubsync');
+                // Set default active tab based on channel content type
+                const contentType = '{{ $youtubeChannel->content_type }}';
+                if (contentType === 'dub' && tabDubsyncBtn) {
+                    setActiveTab('dubsync');
+                } else if (contentType === 'audiobook' && tabAudiobooksBtn) {
+                    setActiveTab('audiobooks');
+                } else if (contentType === 'self_creative' && tabSelfCreativeBtn) {
+                    setActiveTab('selfCreative');
+                }
 
                 openBtns.forEach((btn) => {
                     if (!btn) return;
@@ -1009,354 +919,5 @@
                 });
             });
 
-            // ========== SPEAKER (MC) MANAGEMENT ==========
-            const channelId = {{ $youtubeChannel->id }};
-            const speakersUrl = "{{ route('youtube-channels.speakers.index', $youtubeChannel) }}";
-            const speakerStoreUrl = "{{ route('youtube-channels.speakers.store', $youtubeChannel) }}";
-            let speakersData = [];
-
-            // Load speakers
-            async function loadSpeakers() {
-                const container = document.getElementById('speakersContainer');
-                try {
-                    const response = await fetch(speakersUrl);
-                    const data = await response.json();
-
-                    if (data.success) {
-                        speakersData = data.speakers;
-                        renderSpeakers(data.speakers);
-                    } else {
-                        container.innerHTML =
-                            '<div class="col-span-full text-center py-8 text-red-500">Lỗi tải danh sách MC</div>';
-                    }
-                } catch (e) {
-                    container.innerHTML = '<div class="col-span-full text-center py-8 text-red-500">Lỗi: ' + e.message +
-                        '</div>';
-                }
-            }
-
-            // Render speakers grid
-            function renderSpeakers(speakers) {
-                const container = document.getElementById('speakersContainer');
-
-                if (speakers.length === 0) {
-                    container.innerHTML = `
-                        <div class="col-span-full text-center py-8 text-gray-400">
-                            <div class="text-4xl mb-2">🎙️</div>
-                            <p>Chưa có MC nào. Hãy thêm MC đầu tiên cho kênh!</p>
-                        </div>
-                    `;
-                    return;
-                }
-
-                container.innerHTML = speakers.map(speaker => `
-                    <div class="border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition duration-200 ${!speaker.is_active ? 'opacity-60' : ''}">
-                        <div class="relative bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center p-4" style="min-height: 160px;">
-                            ${speaker.avatar_url 
-                                ? `<img src="${speaker.avatar_url}" alt="${speaker.name}" class="w-24 h-24 object-cover rounded-full border-4 border-white shadow-lg">`
-                                : `<div class="w-24 h-24 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center text-white text-3xl shadow-lg border-4 border-white">
-                                                    ${speaker.gender === 'male' ? '👨' : '👩'}
-                                                   </div>`
-                            }
-                            ${!speaker.is_active ? '<span class="absolute top-2 right-2 bg-gray-500 text-white text-xs px-2 py-1 rounded">Tạm ẩn</span>' : ''}
-                            ${speaker.lip_sync_enabled ? '<span class="absolute top-2 left-2 bg-purple-500 text-white text-xs px-2 py-1 rounded">🎬 Lip-sync</span>' : ''}
-                        </div>
-                        <div class="p-4">
-                            <h4 class="text-sm font-semibold text-gray-900 truncate">${speaker.name}</h4>
-                            <p class="text-xs text-gray-500 mt-1">
-                                ${speaker.gender === 'male' ? '👨 Nam' : '👩 Nữ'}
-                                ${speaker.default_voice_provider ? ' • ' + speaker.default_voice_provider.toUpperCase() : ''}
-                            </p>
-                            ${speaker.description ? `<p class="text-xs text-gray-600 mt-2 line-clamp-2">${speaker.description}</p>` : ''}
-                            <p class="text-xs text-purple-600 mt-2">📚 ${speaker.audiobooks_count} audiobooks</p>
-                            
-                            <div class="flex gap-2 mt-4">
-                                <button onclick="editSpeaker(${speaker.id})" class="flex-1 text-center px-3 py-1.5 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700">
-                                    ✏️ Sửa
-                                </button>
-                                <button onclick="toggleSpeakerStatus(${speaker.id})" class="px-3 py-1.5 ${speaker.is_active ? 'bg-gray-200 text-gray-800 hover:bg-gray-300' : 'bg-green-100 text-green-700 hover:bg-green-200'} rounded text-xs font-medium">
-                                    ${speaker.is_active ? '🙈' : '👁️'}
-                                </button>
-                                <button onclick="deleteSpeaker(${speaker.id}, '${speaker.name}')" class="px-3 py-1.5 bg-red-100 text-red-700 rounded text-xs font-medium hover:bg-red-200">
-                                    🗑️
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                `).join('');
-            }
-
-            // Open speaker modal
-            function openSpeakerModal(speakerId = null) {
-                const modal = document.getElementById('speakerModal');
-                const form = document.getElementById('speakerForm');
-                const title = document.getElementById('speakerModalTitle');
-                const submitBtn = document.getElementById('speakerSubmitBtn');
-
-                // Reset form
-                form.reset();
-                document.getElementById('speakerId').value = '';
-                document.getElementById('speakerAvatarPreview').classList.add('hidden');
-                document.getElementById('speakerFormStatus').innerHTML = '';
-                document.getElementById('lipSyncSettings').classList.add('hidden');
-
-                if (speakerId) {
-                    // Edit mode
-                    const speaker = speakersData.find(s => s.id === speakerId);
-                    if (speaker) {
-                        title.textContent = 'Chỉnh sửa MC: ' + speaker.name;
-                        submitBtn.textContent = '💾 Cập nhật MC';
-                        document.getElementById('speakerId').value = speaker.id;
-                        document.getElementById('speakerName').value = speaker.name;
-                        document.getElementById('speakerDescription').value = speaker.description || '';
-                        document.getElementById('speakerVoiceProvider').value = speaker.default_voice_provider || '';
-                        document.getElementById('speakerVoiceStyle').value = speaker.voice_style || '';
-                        document.getElementById('speakerLipSyncEnabled').checked = speaker.lip_sync_enabled;
-
-                        const genderRadio = document.querySelector(`input[name="gender"][value="${speaker.gender}"]`);
-                        if (genderRadio) genderRadio.checked = true;
-
-                        if (speaker.avatar_url) {
-                            const preview = document.getElementById('speakerAvatarPreview');
-                            preview.querySelector('img').src = speaker.avatar_url;
-                            preview.classList.remove('hidden');
-                        }
-
-                        if (speaker.lip_sync_enabled) {
-                            document.getElementById('lipSyncSettings').classList.remove('hidden');
-                            if (speaker.lip_sync_settings) {
-                                document.getElementById('lipSyncSensitivity').value = speaker.lip_sync_settings.sensitivity ||
-                                    0.5;
-                                document.getElementById('lipSyncSensitivityValue').textContent = speaker.lip_sync_settings
-                                    .sensitivity || 0.5;
-                            }
-                        }
-
-                        // Load voice options after setting provider and gender
-                        setTimeout(() => {
-                            updateSpeakerVoiceOptions();
-                            // Set the selected voice after options are loaded
-                            setTimeout(() => {
-                                if (speaker.default_voice_name) {
-                                    document.getElementById('speakerVoiceName').value = speaker
-                                        .default_voice_name;
-                                }
-                            }, 300);
-                        }, 100);
-                    }
-                } else {
-                    // Add mode
-                    title.textContent = 'Thêm MC mới';
-                    submitBtn.textContent = '💾 Lưu MC';
-                }
-
-                modal.classList.remove('hidden');
-                modal.classList.add('flex');
-            }
-
-            // Close speaker modal
-            function closeSpeakerModal() {
-                const modal = document.getElementById('speakerModal');
-                modal.classList.add('hidden');
-                modal.classList.remove('flex');
-            }
-
-            // Edit speaker
-            function editSpeaker(speakerId) {
-                openSpeakerModal(speakerId);
-            }
-
-            // Toggle speaker status
-            async function toggleSpeakerStatus(speakerId) {
-                try {
-                    const response = await fetch(`/youtube-channels/${channelId}/speakers/${speakerId}/toggle-status`, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
-                            'Accept': 'application/json',
-                        }
-                    });
-                    const data = await response.json();
-
-                    if (data.success) {
-                        loadSpeakers();
-                    } else {
-                        alert('Lỗi: ' + (data.message || 'Không thể thay đổi trạng thái'));
-                    }
-                } catch (e) {
-                    alert('Lỗi: ' + e.message);
-                }
-            }
-
-            // Delete speaker
-            async function deleteSpeaker(speakerId, speakerName) {
-                if (!confirm(`Bạn có chắc muốn xóa MC "${speakerName}"?`)) return;
-
-                try {
-                    const response = await fetch(`/youtube-channels/${channelId}/speakers/${speakerId}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
-                            'Accept': 'application/json',
-                        }
-                    });
-                    const data = await response.json();
-
-                    if (data.success) {
-                        loadSpeakers();
-                    } else {
-                        alert('Lỗi: ' + (data.message || 'Không thể xóa MC'));
-                    }
-                } catch (e) {
-                    alert('Lỗi: ' + e.message);
-                }
-            }
-
-            // Handle speaker form submit
-            document.getElementById('speakerForm')?.addEventListener('submit', async function(e) {
-                e.preventDefault();
-
-                const formData = new FormData(this);
-                const speakerId = document.getElementById('speakerId').value;
-                const statusEl = document.getElementById('speakerFormStatus');
-                const submitBtn = document.getElementById('speakerSubmitBtn');
-
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = '<span class="animate-spin inline-block mr-2">⏳</span> Đang lưu...';
-                statusEl.innerHTML = '<span class="text-blue-600">Đang xử lý...</span>';
-
-                try {
-                    let url = speakerStoreUrl;
-                    let method = 'POST';
-
-                    if (speakerId) {
-                        url = `/youtube-channels/${channelId}/speakers/${speakerId}`;
-                        formData.append('_method', 'PUT');
-                    }
-
-                    const response = await fetch(url, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ||
-                                '',
-                            'Accept': 'application/json',
-                        },
-                        body: formData
-                    });
-
-                    const data = await response.json();
-
-                    if (data.success) {
-                        statusEl.innerHTML = '<span class="text-green-600">✅ ' + data.message + '</span>';
-                        setTimeout(() => {
-                            closeSpeakerModal();
-                            loadSpeakers();
-                        }, 1000);
-                    } else {
-                        statusEl.innerHTML = '<span class="text-red-600">❌ ' + (data.message ||
-                            'Lỗi không xác định') + '</span>';
-                    }
-                } catch (e) {
-                    statusEl.innerHTML = '<span class="text-red-600">❌ Lỗi: ' + e.message + '</span>';
-                } finally {
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = speakerId ? '💾 Cập nhật MC' : '💾 Lưu MC';
-                }
-            });
-
-            // Avatar preview
-            document.getElementById('speakerAvatar')?.addEventListener('change', function(e) {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
-                        const preview = document.getElementById('speakerAvatarPreview');
-                        preview.querySelector('img').src = e.target.result;
-                        preview.classList.remove('hidden');
-                    };
-                    reader.readAsDataURL(file);
-                }
-            });
-
-            // Lip sync toggle
-            document.getElementById('speakerLipSyncEnabled')?.addEventListener('change', function() {
-                const settings = document.getElementById('lipSyncSettings');
-                if (this.checked) {
-                    settings.classList.remove('hidden');
-                } else {
-                    settings.classList.add('hidden');
-                }
-            });
-
-            // Lip sync sensitivity slider
-            document.getElementById('lipSyncSensitivity')?.addEventListener('input', function() {
-                document.getElementById('lipSyncSensitivityValue').textContent = this.value;
-            });
-
-            // Voice selection logic
-            let speakerVoiceCache = {};
-
-            // Provider change for speaker
-            document.getElementById('speakerVoiceProvider')?.addEventListener('change', function() {
-                updateSpeakerVoiceOptions();
-            });
-
-            // Gender change for speaker
-            document.querySelectorAll('input[name="gender"]').forEach(radio => {
-                radio.addEventListener('change', function() {
-                    updateSpeakerVoiceOptions();
-                });
-            });
-
-            // Update speaker voice options
-            async function updateSpeakerVoiceOptions() {
-                const voiceSelect = document.getElementById('speakerVoiceName');
-                const provider = document.getElementById('speakerVoiceProvider').value;
-                const gender = document.querySelector('input[name="gender"]:checked')?.value || 'female';
-
-                if (!provider) {
-                    voiceSelect.innerHTML = '<option value="">-- Chọn TTS Provider trước --</option>';
-                    return;
-                }
-
-                voiceSelect.innerHTML = '<option value="">⏳ Đang tải...</option>';
-
-                try {
-                    const voices = await fetchSpeakerVoices(gender, provider);
-                    voiceSelect.innerHTML = '<option value="">-- Chọn giọng --</option>';
-
-                    for (const [voiceCode, voiceLabel] of Object.entries(voices)) {
-                        const option = document.createElement('option');
-                        option.value = voiceCode;
-                        option.textContent = voiceLabel;
-                        voiceSelect.appendChild(option);
-                    }
-                } catch (error) {
-                    voiceSelect.innerHTML = '<option value="">-- Lỗi tải giọng --</option>';
-                }
-            }
-
-            async function fetchSpeakerVoices(gender, provider) {
-                const cacheKey = `${provider}:${gender}`;
-                if (speakerVoiceCache[cacheKey]) {
-                    return speakerVoiceCache[cacheKey];
-                }
-
-                const response = await fetch(`/get-available-voices?gender=${gender}&provider=${provider}`);
-                const data = await response.json();
-
-                if (data.success) {
-                    speakerVoiceCache[cacheKey] = data.voices[gender] || {};
-                    return speakerVoiceCache[cacheKey];
-                }
-                return {};
-            }
-
-            // Close modal on backdrop click
-            document.getElementById('speakerModal')?.addEventListener('click', function(e) {
-                if (e.target === this) {
-                    closeSpeakerModal();
-                }
-            });
         </script>
     @endsection
