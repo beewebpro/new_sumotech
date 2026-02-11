@@ -2583,7 +2583,8 @@
 
                         <!-- Logo Size -->
                         <div>
-                            <label class="block text-xs font-medium text-gray-700 mb-1">Kích thước logo (% chiều rộng ảnh):</label>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Kích thước logo (% chiều rộng
+                                ảnh):</label>
                             <div class="flex items-center gap-2">
                                 <input type="range" id="logoScale" min="5" max="50" value="15"
                                     class="flex-1">
@@ -6040,10 +6041,10 @@
                             <span class="text-gray-800">${ch.title || 'Chưa có tiêu đề'}</span>
                         </div>
                         ${ch.has_cover ? `
-                                                                                                                                                                                            <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Đã có bìa</span>
-                                                                                                                                                                                        ` : `
-                                                                                                                                                                                            <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">Chưa có bìa</span>
-                                                                                                                                                                                        `}
+                                                                                                                                                                                                    <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Đã có bìa</span>
+                                                                                                                                                                                                ` : `
+                                                                                                                                                                                                    <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">Chưa có bìa</span>
+                                                                                                                                                                                                `}
                     </label>
                 `).join('');
 
@@ -7284,7 +7285,7 @@
                         const childTitles = document.querySelectorAll(
                             '.playlist-child-title:not([readonly])');
                         const childDescs = document.querySelectorAll(
-                        '.playlist-child-desc:not([readonly])');
+                            '.playlist-child-desc:not([readonly])');
                         playlistChildMeta.forEach((item, i) => {
                             if (!item.uploaded) {
                                 chapters.push({
@@ -7401,7 +7402,7 @@
 
                     result.history.forEach((h, i) => {
                         const date = h.uploaded_at ? new Date(h.uploaded_at).toLocaleString('vi-VN') :
-                        'N/A';
+                            'N/A';
                         html += `<tr class="border-b hover:bg-gray-50">
                             <td class="p-2 text-gray-500">${i + 1}</td>
                             <td class="p-2 font-medium text-gray-700">Ch.${h.chapter_number}: ${h.chapter_title}</td>
@@ -7479,7 +7480,8 @@
                                 const newVideos = checkedVideos.filter(cb => cb.dataset.uploaded !== '1');
                                 if (newVideos.length === 0) {
                                     alert(
-                                        'Tất cả video đã chọn đều đã được upload. Không có video mới để upload.');
+                                        'Tất cả video đã chọn đều đã được upload. Không có video mới để upload.'
+                                    );
                                     btn.disabled = false;
                                     progressEl.classList.add('hidden');
                                     return;
