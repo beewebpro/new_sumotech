@@ -17,8 +17,13 @@ use App\Services\LipsyncSegmentManager;
 use App\Services\VideoCompositionService;
 use App\Services\DescriptionVideoService;
 use App\Jobs\GenerateDescriptionVideoJob;
+use App\Jobs\GenerateFullBookVideoJob;
+use App\Jobs\GenerateBatchVideoJob;
+use App\Jobs\PublishYoutubeJob;
+use App\Models\AudioBookVideoSegment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -66,6 +71,22 @@ class AudioBookController extends Controller
                 'domains' => ['vietnamthuquan.eu', 'www.vietnamthuquan.eu', 'vnthuquan.net', 'www.vnthuquan.net']
             ]
         ];
+    }
+
+    protected function detectBookSource(string $bookUrl, array $scrapeSources): ?string
+    {
+        $host = parse_url($bookUrl, PHP_URL_HOST);
+        if (!$host) {
+            return null;
+        }
+
+        foreach ($scrapeSources as $source => $config) {
+            if (in_array($host, $config['domains'], true)) {
+                return $source;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -223,7 +244,7 @@ class AudioBookController extends Controller
      */
     public function show(AudioBook $audioBook)
     {
-        $audioBook->load(['youtubeChannel', 'chapters', 'speaker']);
+        $audioBook->load(['youtubeChannel', 'chapters', 'speaker', 'videoSegments']);
 
         // Get available speakers from the same YouTube channel
         $speakers = [];
@@ -472,19 +493,7 @@ class AudioBookController extends Controller
         $bookUrl = $request->input('book_url');
         $scrapeSources = $this->getScrapeSources();
 
-        // Detect which source the URL belongs to
-        $host = parse_url($bookUrl, PHP_URL_HOST);
-        if (!$host) {
-            return response()->json(['error' => 'URL không hợp lệ'], 400);
-        }
-
-        $bookSource = null;
-        foreach ($scrapeSources as $source => $config) {
-            if (in_array($host, $config['domains'], true)) {
-                $bookSource = $source;
-                break;
-            }
-        }
+        $bookSource = $this->detectBookSource($bookUrl, $scrapeSources);
 
         if (!$bookSource) {
             $supportedDomains = [];
@@ -531,6 +540,124 @@ class AudioBookController extends Controller
         } catch (\Exception $e) {
             return response()->json(['error' => 'Lỗi khi lấy thông tin sách: ' . $e->getMessage()], 400);
         }
+    }
+
+    public function bulkCreate(Request $request)
+    {
+        $data = $request->validate([
+            'youtube_channel_id' => 'required|exists:youtube_channels,id',
+            'language' => 'required|string|in:vi,en,es,fr,de,ja,ko',
+            'book_urls' => 'required|array|min:1',
+            'book_urls.*' => 'required|url'
+        ]);
+
+        $scrapeSources = $this->getScrapeSources();
+        $urls = array_values(array_unique(array_filter(array_map('trim', $data['book_urls']))));
+
+        if (count($urls) === 0) {
+            return response()->json(['error' => 'Danh sách URL trống'], 422);
+        }
+
+        $created = [];
+        $errors = [];
+
+        foreach ($urls as $bookUrl) {
+            $bookSource = $this->detectBookSource($bookUrl, $scrapeSources);
+            if (!$bookSource) {
+                $errors[] = [
+                    'url' => $bookUrl,
+                    'error' => 'URL không thuộc nguồn được hỗ trợ'
+                ];
+                continue;
+            }
+
+            try {
+                switch ($bookSource) {
+                    case 'docsach24':
+                        $scraper = new Docsach24Scraper($bookUrl);
+                        break;
+                    case 'vietnamthuquan':
+                        $scraper = new VietNamThuQuanScraper($bookUrl);
+                        break;
+                    case 'nhasachmienphi':
+                    default:
+                        $scraper = new NhaSachMienPhiScraper($bookUrl);
+                        break;
+                }
+
+                $result = $scraper->scrape();
+                if (isset($result['error'])) {
+                    $errors[] = [
+                        'url' => $bookUrl,
+                        'error' => $result['error']
+                    ];
+                    continue;
+                }
+
+                $audioBook = AudioBook::create([
+                    'youtube_channel_id' => $data['youtube_channel_id'],
+                    'title' => $result['title'] ?? 'Sách không xác định',
+                    'book_type' => 'sach',
+                    'author' => $result['author'] ?? null,
+                    'category' => $result['category'] ?? null,
+                    'description' => $result['description'] ?? null,
+                    'language' => $data['language'],
+                    'total_chapters' => 0
+                ]);
+
+                if (!empty($result['cover_image'])) {
+                    try {
+                        $imageUrl = $result['cover_image'];
+                        $imageContent = Http::timeout(30)->get($imageUrl)->body();
+                        $extension = pathinfo(parse_url($imageUrl, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'jpg';
+                        $filename = 'audiobooks/' . uniqid() . '.' . $extension;
+                        Storage::disk('public')->put($filename, $imageContent);
+                        $audioBook->update(['cover_image' => $filename]);
+                    } catch (\Exception $e) {
+                        $audioBook->update(['cover_image' => $result['cover_image']]);
+                    }
+                }
+
+                $chapterNumber = 1;
+                foreach ($result['chapters'] as $chapter) {
+                    $content = $scraper->scrapeChapterContent($chapter['url']);
+                    if ($content) {
+                        AudioBookChapter::create([
+                            'audio_book_id' => $audioBook->id,
+                            'chapter_number' => $chapterNumber,
+                            'title' => $chapter['title'],
+                            'content' => $content,
+                            'tts_voice' => $audioBook->language == 'vi' ? 'vi-VN-HoaiMyNeural' : 'en-US-AriaNeural',
+                            'tts_speed' => 1.0,
+                            'status' => 'pending'
+                        ]);
+                        $chapterNumber++;
+                    }
+                }
+
+                $importedCount = $chapterNumber - 1;
+                $audioBook->update(['total_chapters' => $importedCount]);
+
+                $created[] = [
+                    'id' => $audioBook->id,
+                    'title' => $audioBook->title,
+                    'url' => $bookUrl,
+                    'chapters' => $importedCount
+                ];
+            } catch (\Exception $e) {
+                $errors[] = [
+                    'url' => $bookUrl,
+                    'error' => 'Lỗi tạo sách: ' . $e->getMessage()
+                ];
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'total' => count($urls),
+            'created' => $created,
+            'errors' => $errors
+        ]);
     }
 
     /**
@@ -3111,8 +3238,10 @@ class AudioBookController extends Controller
     {
         $request->validate([
             'image_filename' => 'required|string',
-            'chapter_ids' => 'required|array|min:1',
+            'chapter_ids' => 'nullable|array',
             'chapter_ids.*' => 'integer|exists:audiobook_chapters,id',
+            'segment_ids' => 'nullable|array',
+            'segment_ids.*' => 'integer|exists:audiobook_video_segments,id',
             'text_options' => 'nullable|array',
             'text_options.font_size' => 'nullable|integer|min:40|max:150',
             'text_options.text_color' => 'nullable|string',
@@ -3123,8 +3252,17 @@ class AudioBookController extends Controller
             'text_options.position_y' => 'nullable|numeric|min:0|max:100',
         ]);
 
+        $chapterIds = $request->input('chapter_ids', []);
+        $segmentIds = $request->input('segment_ids', []);
+
+        if (empty($chapterIds) && empty($segmentIds)) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Vui lòng chọn ít nhất 1 chương hoặc 1 phần.'
+            ], 422);
+        }
+
         $imageFilename = $request->input('image_filename');
-        $chapterIds = $request->input('chapter_ids');
         $textOptions = $request->input('text_options', []);
 
         // Default text options
@@ -3168,9 +3306,9 @@ class AudioBookController extends Controller
         $outlineColorHex = ltrim($outlineColor, '#');
 
         $results = [];
-        $chapters = AudioBookChapter::whereIn('id', $chapterIds)
-            ->where('audio_book_id', $audioBook->id)
-            ->get();
+        $chapters = !empty($chapterIds)
+            ? AudioBookChapter::whereIn('id', $chapterIds)->where('audio_book_id', $audioBook->id)->get()
+            : collect();
 
         foreach ($chapters as $chapter) {
             try {
@@ -3280,11 +3418,82 @@ class AudioBookController extends Controller
             }
         }
 
+        // Generate covers for segments (Phần)
+        if (!empty($segmentIds)) {
+            $segments = AudioBookVideoSegment::whereIn('id', $segmentIds)
+                ->where('audio_book_id', $audioBook->id)
+                ->orderBy('sort_order')
+                ->get();
+
+            foreach ($segments as $segment) {
+                try {
+                    $outputFilename = "segment_{$segment->id}.png";
+                    $outputPath = str_replace('\\', '/', "{$coversDirPath}/{$outputFilename}");
+
+                    $segmentText = $segment->name;
+
+                    $escapedFontPath = str_replace(['\\', ':'], ['/', '\\:'], $fontPath);
+                    $xPosition = "w*{$positionX}/100-text_w/2";
+                    $yPosition = "h*{$positionY}/100-text_h/2";
+
+                    $drawTextFilter = sprintf(
+                        "drawtext=fontfile='%s':text='%s':fontsize=%d:fontcolor=0x%s:borderw=%d:bordercolor=0x%s:x=%s:y=%s",
+                        $escapedFontPath,
+                        $this->escapeFFmpegText($segmentText),
+                        $fontSize,
+                        $textColorHex,
+                        $outlineWidth,
+                        $outlineColorHex,
+                        $xPosition,
+                        $yPosition
+                    );
+
+                    $command = sprintf(
+                        '%s -y -i %s -vf "%s" -q:v 2 %s 2>&1',
+                        escapeshellarg($ffmpegPath),
+                        escapeshellarg($sourceImagePath),
+                        $drawTextFilter,
+                        escapeshellarg($outputPath)
+                    );
+
+                    exec($command, $output, $returnCode);
+
+                    if ($returnCode !== 0) {
+                        $results[] = [
+                            'segment_id' => $segment->id,
+                            'segment_name' => $segment->name,
+                            'success' => false,
+                            'error' => 'FFmpeg failed'
+                        ];
+                        continue;
+                    }
+
+                    $relativePath = "{$coversDir}/{$outputFilename}";
+                    $segment->update(['image_path' => $outputFilename, 'image_type' => 'chapter_covers']);
+
+                    $results[] = [
+                        'segment_id' => $segment->id,
+                        'segment_name' => $segment->name,
+                        'success' => true,
+                        'cover_image' => asset("storage/{$relativePath}")
+                    ];
+                } catch (\Exception $e) {
+                    $results[] = [
+                        'segment_id' => $segment->id,
+                        'segment_name' => $segment->name,
+                        'success' => false,
+                        'error' => $e->getMessage()
+                    ];
+                }
+            }
+        }
+
         $successCount = count(array_filter($results, fn($r) => $r['success']));
+        $totalCount = count($results);
 
         return response()->json([
             'success' => true,
-            'message' => "Đã tạo {$successCount}/" . count($results) . " ảnh bìa chương",
+            'message' => "Đã tạo {$successCount}/{$totalCount} ảnh bìa",
             'results' => $results
         ]);
     }
@@ -3868,6 +4077,26 @@ class AudioBookController extends Controller
             $chaptersWithoutVideo[] = $chapter->chapter_number;
         }
 
+        // Segment videos
+        foreach ($audioBook->videoSegments()->orderBy('sort_order')->get() as $segment) {
+            if ($segment->video_path && $segment->status === 'completed') {
+                $path = storage_path('app/public/' . $segment->video_path);
+                if (file_exists($path)) {
+                    $videos[] = [
+                        'id' => 'segment_' . $segment->id,
+                        'type' => 'segment',
+                        'label' => $segment->name ?: ('Phần ' . $segment->sort_order),
+                        'path' => $segment->video_path,
+                        'duration' => $segment->video_duration,
+                        'youtube_video_id' => $segment->youtube_video_id ?? null,
+                        'youtube_video_title' => $segment->youtube_video_title ?? null,
+                        'youtube_video_description' => $segment->youtube_video_description ?? null,
+                        'youtube_uploaded_at' => $segment->youtube_uploaded_at ?? null,
+                    ];
+                }
+            }
+        }
+
         // Thumbnails from media gallery
         $media = $this->imageService->getExistingMedia($audioBook->id);
         $thumbnails = $media['thumbnails'] ?? [];
@@ -3959,6 +4188,10 @@ class AudioBookController extends Controller
     {
         $request->validate([
             'type' => 'required|string|in:title,description',
+            'items' => 'nullable|array',
+            'items.*.label' => 'nullable|string',
+            'items.*.duration' => 'nullable|numeric',
+            'items.*.type' => 'nullable|string',
         ]);
 
         $type = $request->input('type');
@@ -4004,16 +4237,25 @@ class AudioBookController extends Controller
 
                 return response()->json(['success' => true, 'title' => $title, 'tags' => $tags]);
             } else {
+                $timestampSection = $this->buildTimestampSection($audioBook, $request->input('items', []));
+
                 $prompt = "Bạn là chuyên gia YouTube SEO. Hãy viết mô tả YouTube chuyên nghiệp cho video audiobook/sách nói sau:\n\n";
                 $prompt .= "Tên sách: {$audioBook->title}\n";
                 if ($audioBook->author) $prompt .= "Tác giả: {$audioBook->author}\n";
                 if ($audioBook->category) $prompt .= "Thể loại: {$audioBook->category}\n";
                 if ($channelName) $prompt .= "Kênh: {$channelName}\n";
                 if ($audioBook->description) $prompt .= "\nMô tả gốc (tham khảo):\n" . mb_substr($audioBook->description, 0, 500) . "\n";
+                if ($timestampSection !== '') {
+                    $prompt .= "\nMốc thời gian (timestamps) tính theo thời lượng TTS đã tạo:\n";
+                    $prompt .= $timestampSection . "\n";
+                }
                 $prompt .= "\nYêu cầu:\n";
                 $prompt .= "- Viết bằng tiếng Việt, tối đa 300 từ\n";
                 $prompt .= "- KHÔNG sử dụng ký tự markdown như ** hoặc __ để in đậm. Thay vào đó dùng emoji phù hợp (📚, 🎧, ✨, 🔥, 👇, ❤️, 🎵, 📖, ⭐, 💡...) để làm nổi bật các phần\n";
                 $prompt .= "- Bao gồm: giới thiệu ngắn sách, lý do nên nghe, CTA (đăng ký, like, bình luận)\n";
+                if ($timestampSection !== '') {
+                    $prompt .= "- Giữ nguyên danh sách timestamps theo đúng thứ tự, đặt ở cuối mô tả\n";
+                }
                 $prompt .= "- Thêm hashtag ở cuối (#audiobook #sachnoiviet ...)\n";
                 $prompt .= "- Chỉ trả về nội dung mô tả, không giải thích";
 
@@ -4029,6 +4271,10 @@ class AudioBookController extends Controller
                 $result = json_decode($response->getBody()->getContents(), true);
                 $description = trim($result['candidates'][0]['content']['parts'][0]['text'] ?? '');
 
+                if ($timestampSection !== '' && stripos($description, 'mốc thời gian') === false) {
+                    $description = rtrim($description) . "\n\n⏱️ Mốc thời gian:\n" . $timestampSection;
+                }
+
                 // Save to database
                 $audioBook->update([
                     'youtube_video_description' => $description,
@@ -4039,6 +4285,114 @@ class AudioBookController extends Controller
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'error' => 'Lỗi AI: ' . $e->getMessage()], 500);
         }
+    }
+
+    private function buildTimestampSection(AudioBook $audioBook, array $items): string
+    {
+        $lines = [];
+        $elapsed = 0;
+
+        $chapters = $audioBook->chapters()
+            ->select(['id', 'chapter_number', 'title', 'total_duration'])
+            ->orderBy('chapter_number')
+            ->get();
+        $chaptersById = $chapters->keyBy('id');
+        $chaptersByNumber = $chapters->keyBy('chapter_number');
+
+        $segmentIds = [];
+        foreach ($items as $item) {
+            if (($item['type'] ?? null) !== 'segment') {
+                continue;
+            }
+            $segmentId = $this->parsePrefixedId($item['id'] ?? null, 'segment_');
+            if ($segmentId) {
+                $segmentIds[] = $segmentId;
+            }
+        }
+
+        $segmentsById = collect();
+        if (!empty($segmentIds)) {
+            $segmentsById = $audioBook->videoSegments()
+                ->whereIn('id', array_values(array_unique($segmentIds)))
+                ->get()
+                ->keyBy('id');
+        }
+
+        foreach ($items as $item) {
+            $type = $item['type'] ?? null;
+            $duration = isset($item['duration']) ? (float) $item['duration'] : 0;
+            $label = trim((string) ($item['label'] ?? ''));
+
+            if ($type === 'description') {
+                continue;
+            }
+
+            if ($type === 'segment') {
+                $segmentId = $this->parsePrefixedId($item['id'] ?? null, 'segment_');
+                $segment = $segmentId ? $segmentsById->get($segmentId) : null;
+                $chapterNums = is_array($segment?->chapters) ? $segment->chapters : [];
+
+                foreach ($chapterNums as $chapterNum) {
+                    $chapterNum = (int) $chapterNum;
+                    $chapter = $chaptersByNumber->get($chapterNum);
+                    if (!$chapter) {
+                        continue;
+                    }
+                    $chapterDuration = (float) ($chapter->total_duration ?? 0);
+                    if ($chapterDuration <= 0) {
+                        continue;
+                    }
+
+                    $chapterLabel = 'Chương ' . $chapter->chapter_number . ': ' . $chapter->title;
+                    $lines[] = $this->formatTimestamp($elapsed) . ' ' . $chapterLabel;
+                    $elapsed += $chapterDuration;
+                }
+
+                continue;
+            }
+
+            if ($type === 'chapter') {
+                $chapterId = $this->parsePrefixedId($item['id'] ?? null, 'chapter_');
+                $chapter = $chapterId ? $chaptersById->get($chapterId) : null;
+                if ($chapter) {
+                    $duration = (float) ($chapter->total_duration ?? 0);
+                    $label = 'Chương ' . $chapter->chapter_number . ': ' . $chapter->title;
+                }
+            }
+
+            if ($duration <= 0 || $label === '') {
+                continue;
+            }
+
+            $lines[] = $this->formatTimestamp($elapsed) . ' ' . $label;
+            $elapsed += $duration;
+        }
+
+        return implode("\n", $lines);
+    }
+
+    private function parsePrefixedId(?string $value, string $prefix): ?int
+    {
+        if (!$value || !str_starts_with($value, $prefix)) {
+            return null;
+        }
+
+        $id = (int) substr($value, strlen($prefix));
+        return $id > 0 ? $id : null;
+    }
+
+    private function formatTimestamp(float $seconds): string
+    {
+        $total = (int) round($seconds);
+        $hours = (int) floor($total / 3600);
+        $mins = (int) floor(($total % 3600) / 60);
+        $secs = (int) ($total % 60);
+
+        if ($hours > 0) {
+            return sprintf('%d:%02d:%02d', $hours, $mins, $secs);
+        }
+
+        return sprintf('%02d:%02d', $mins, $secs);
     }
 
     /**
@@ -4052,6 +4406,8 @@ class AudioBookController extends Controller
             'chapters' => 'required|array|min:2',
             'chapters.*.id' => 'required|string',
             'chapters.*.label' => 'required|string',
+            'chapters.*.type' => 'nullable|string',
+            'chapters.*.duration' => 'nullable|numeric',
         ]);
 
         $mainTitle = $request->input('title');
@@ -4065,9 +4421,9 @@ class AudioBookController extends Controller
         $prompt .= "MÔ TẢ CHUNG: {$mainDesc}\n\n";
         $prompt .= "DANH SÁCH VIDEO:\n{$chapterList}\n\n";
         $prompt .= "YÊU CẦU:\n";
-        $prompt .= "- Mỗi video cần 1 tiêu đề riêng (tối đa 100 ký tự) và 1 mô tả ngắn (2-3 câu)\n";
+        $prompt .= "- Mỗi video cần 1 tiêu đề riêng (tối đa 100 ký tự) và 1 mô tả đầy đủ (không rút gọn)\n";
         $prompt .= "- Tiêu đề phải bao gồm tên sách + số chương/phần\n";
-        $prompt .= "- Mô tả ngắn gọn, hấp dẫn, có CTA\n";
+        $prompt .= "- Mô tả đầy đủ, hấp dẫn, có CTA, giữ tinh thần của mô tả chung\n";
         $prompt .= "- Trả về JSON array, mỗi phần tử có 'title' và 'description'\n";
         $prompt .= "- Chỉ trả về JSON, không giải thích\n";
         $prompt .= "Ví dụ: [{\"title\": \"...\", \"description\": \"...\"}]";
@@ -4118,11 +4474,17 @@ class AudioBookController extends Controller
             // Map back to chapters
             $mapped = [];
             foreach ($chapters as $i => $chapter) {
+                $timestampSection = $this->buildTimestampSection($audioBook, [$chapter]);
+                $description = $items[$i]['description'] ?? $mainDesc;
+                if ($timestampSection !== '' && stripos($description, 'mốc thời gian') === false) {
+                    $description = rtrim($description) . "\n\n⏱️ Mốc thời gian:\n" . $timestampSection;
+                }
+
                 $mapped[] = [
                     'id' => $chapter['id'],
                     'source_label' => $chapter['label'],
                     'title' => $items[$i]['title'] ?? "{$mainTitle} - Phần " . ($i + 1),
-                    'description' => $items[$i]['description'] ?? $mainDesc,
+                    'description' => $description,
                 ];
             }
 
@@ -4150,7 +4512,7 @@ class AudioBookController extends Controller
     {
         $request->validate([
             'video_id' => 'required|string',
-            'video_type' => 'required|string|in:description,chapter',
+            'video_type' => 'required|string|in:description,chapter,segment',
             'title' => 'required|string|max:100',
             'description' => 'nullable|string',
             'tags' => 'nullable|string',
@@ -4217,6 +4579,23 @@ class AudioBookController extends Controller
 
                 if ($chapter) {
                     $chapter->update([
+                        'youtube_video_id' => $videoId,
+                        'youtube_video_title' => $title,
+                        'youtube_video_description' => $description,
+                        'youtube_uploaded_at' => now(),
+                    ]);
+                }
+            }
+
+            // Save tracking data to segment if it's a segment video
+            if ($request->input('video_type') === 'segment') {
+                $segmentId = str_replace('segment_', '', $request->input('video_id'));
+                $segment = AudioBookVideoSegment::where('audio_book_id', $audioBook->id)
+                    ->where('id', $segmentId)
+                    ->first();
+
+                if ($segment) {
+                    $segment->update([
                         'youtube_video_id' => $videoId,
                         'youtube_video_title' => $title,
                         'youtube_video_description' => $description,
@@ -4300,7 +4679,6 @@ class AudioBookController extends Controller
                 'error' => '❌ Upload thất bại: ' . $errorMessage,
                 'details' => $errorMessage
             ], $statusCode);
-
         } catch (\Exception $e) {
             Log::error('YouTube upload failed', ['error' => $e->getMessage(), 'audiobook' => $audioBook->id]);
             return response()->json([
@@ -4308,6 +4686,32 @@ class AudioBookController extends Controller
                 'error' => '❌ Upload thất bại: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Queue a single video upload to YouTube (async).
+     */
+    public function uploadToYoutubeAsync(Request $request, AudioBook $audioBook)
+    {
+        $request->validate([
+            'video_id' => 'required|string',
+            'video_type' => 'required|string|in:description,chapter,segment',
+            'title' => 'required|string|max:100',
+            'description' => 'nullable|string',
+            'tags' => 'nullable|string',
+            'privacy' => 'required|string|in:public,unlisted,private',
+            'thumbnail_path' => 'nullable|string',
+            'is_shorts' => 'nullable|boolean',
+        ]);
+
+        $this->initPublishProgress($audioBook->id, 'queued', 'Da dua vao hang doi, co the tat trinh duyet.');
+        PublishYoutubeJob::dispatch($audioBook->id, 'upload', $request->all());
+
+        return response()->json([
+            'success' => true,
+            'queued' => true,
+            'message' => 'Da dua vao hang doi xu ly.'
+        ]);
     }
 
     /**
@@ -4323,7 +4727,7 @@ class AudioBookController extends Controller
             'tags' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.video_id' => 'required|string',
-            'items.*.video_type' => 'required|string|in:description,chapter',
+            'items.*.video_type' => 'required|string|in:description,chapter,segment',
             'items.*.title' => 'required|string|max:100',
             'items.*.description' => 'nullable|string',
         ]);
@@ -4380,6 +4784,19 @@ class AudioBookController extends Controller
                 if ($item['video_type'] === 'chapter') {
                     $chapterId = str_replace('chapter_', '', $item['video_id']);
                     AudioBookChapter::where('id', $chapterId)
+                        ->where('audio_book_id', $audioBook->id)
+                        ->update([
+                            'youtube_video_id' => $videoId,
+                            'youtube_video_title' => $item['title'],
+                            'youtube_video_description' => $item['description'] ?? '',
+                            'youtube_uploaded_at' => now(),
+                        ]);
+                }
+
+                // Save tracking data to segment
+                if ($item['video_type'] === 'segment') {
+                    $segmentId = str_replace('segment_', '', $item['video_id']);
+                    AudioBookVideoSegment::where('id', $segmentId)
                         ->where('audio_book_id', $audioBook->id)
                         ->update([
                             'youtube_video_id' => $videoId,
@@ -4506,7 +4923,6 @@ class AudioBookController extends Controller
                 'uploaded_count' => count($uploadedVideos ?? []),
                 'uploaded_videos' => $uploadedVideos ?? []
             ], $statusCode);
-
         } catch (\Exception $e) {
             Log::error('YouTube playlist creation failed', ['error' => $e->getMessage(), 'audiobook' => $audioBook->id]);
             return response()->json([
@@ -4516,6 +4932,34 @@ class AudioBookController extends Controller
                 'uploaded_videos' => $uploadedVideos ?? []
             ], 500);
         }
+    }
+
+    /**
+     * Queue playlist creation and uploads (async).
+     */
+    public function createPlaylistAndUploadAsync(Request $request, AudioBook $audioBook)
+    {
+        $request->validate([
+            'playlist_name' => 'required|string|max:150',
+            'playlist_description' => 'nullable|string',
+            'privacy' => 'required|string|in:public,unlisted,private',
+            'thumbnail_path' => 'nullable|string',
+            'tags' => 'nullable|string',
+            'items' => 'required|array|min:1',
+            'items.*.video_id' => 'required|string',
+            'items.*.video_type' => 'required|string|in:description,chapter,segment',
+            'items.*.title' => 'required|string|max:100',
+            'items.*.description' => 'nullable|string',
+        ]);
+
+        $this->initPublishProgress($audioBook->id, 'queued', 'Da dua vao hang doi, co the tat trinh duyet.');
+        PublishYoutubeJob::dispatch($audioBook->id, 'create_playlist', $request->all());
+
+        return response()->json([
+            'success' => true,
+            'queued' => true,
+            'message' => 'Da dua vao hang doi xu ly.'
+        ]);
     }
 
     /**
@@ -4570,7 +5014,7 @@ class AudioBookController extends Controller
             'tags' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.video_id' => 'required|string',
-            'items.*.video_type' => 'required|string|in:description,chapter',
+            'items.*.video_type' => 'required|string|in:description,chapter,segment',
             'items.*.title' => 'required|string|max:100',
             'items.*.description' => 'nullable|string',
         ]);
@@ -4618,6 +5062,19 @@ class AudioBookController extends Controller
                 if ($item['video_type'] === 'chapter') {
                     $chapterId = str_replace('chapter_', '', $item['video_id']);
                     AudioBookChapter::where('id', $chapterId)
+                        ->where('audio_book_id', $audioBook->id)
+                        ->update([
+                            'youtube_video_id' => $videoId,
+                            'youtube_video_title' => $item['title'],
+                            'youtube_video_description' => $item['description'] ?? '',
+                            'youtube_uploaded_at' => now(),
+                        ]);
+                }
+
+                // Save tracking data to segment
+                if ($item['video_type'] === 'segment') {
+                    $segmentId = str_replace('segment_', '', $item['video_id']);
+                    AudioBookVideoSegment::where('id', $segmentId)
                         ->where('audio_book_id', $audioBook->id)
                         ->update([
                             'youtube_video_id' => $videoId,
@@ -4717,6 +5174,62 @@ class AudioBookController extends Controller
     }
 
     /**
+     * Queue uploads to an existing playlist (async).
+     */
+    public function addToExistingPlaylistAsync(Request $request, AudioBook $audioBook)
+    {
+        $request->validate([
+            'playlist_id' => 'required|string',
+            'playlist_title' => 'nullable|string|max:150',
+            'privacy' => 'required|string|in:public,unlisted,private',
+            'thumbnail_path' => 'nullable|string',
+            'tags' => 'nullable|string',
+            'items' => 'required|array|min:1',
+            'items.*.video_id' => 'required|string',
+            'items.*.video_type' => 'required|string|in:description,chapter,segment',
+            'items.*.title' => 'required|string|max:100',
+            'items.*.description' => 'nullable|string',
+        ]);
+
+        $this->initPublishProgress($audioBook->id, 'queued', 'Da dua vao hang doi, co the tat trinh duyet.');
+        PublishYoutubeJob::dispatch($audioBook->id, 'add_to_playlist', $request->all());
+
+        return response()->json([
+            'success' => true,
+            'queued' => true,
+            'message' => 'Da dua vao hang doi xu ly.'
+        ]);
+    }
+
+    private function initPublishProgress(int $audioBookId, string $status, string $message): void
+    {
+        Cache::put("publish_progress_{$audioBookId}", [
+            'status' => $status,
+            'percent' => 1,
+            'message' => $message,
+            'result' => null,
+            'updated_at' => now()->toIso8601String(),
+        ], now()->addHours(6));
+    }
+
+    /**
+     * Get publish progress for background jobs.
+     */
+    public function getPublishProgress(AudioBook $audioBook)
+    {
+        $progress = Cache::get("publish_progress_{$audioBook->id}");
+
+        if (!$progress) {
+            return response()->json([
+                'success' => true,
+                'status' => 'idle',
+            ]);
+        }
+
+        return response()->json(array_merge(['success' => true], $progress));
+    }
+
+    /**
      * Get YouTube publishing history for this audiobook.
      */
     public function getPublishHistory(AudioBook $audioBook)
@@ -4778,6 +5291,16 @@ class AudioBookController extends Controller
                 ->first();
             if ($chapter && $chapter->video_path) {
                 return storage_path('app/public/' . $chapter->video_path);
+            }
+        }
+
+        if ($videoType === 'segment') {
+            $segmentId = str_replace('segment_', '', $videoId);
+            $segment = AudioBookVideoSegment::where('audio_book_id', $audioBook->id)
+                ->where('id', $segmentId)
+                ->first();
+            if ($segment && $segment->video_path) {
+                return storage_path('app/public/' . $segment->video_path);
             }
         }
 
@@ -4946,5 +5469,838 @@ class AudioBookController extends Controller
             ],
             'timeout' => 30,
         ]);
+    }
+
+    // ====================================================================
+    // FULL BOOK VIDEO (merge all chapter TTS + description into one video)
+    // ====================================================================
+
+    /**
+     * Generate full book video: merge description audio + all chapter full TTS
+     * into one combined audio, then create a single video with image + music + wave.
+     */
+    public function generateFullBookVideo(Request $request, AudioBook $audioBook)
+    {
+        set_time_limit(0);
+
+        try {
+            $request->validate([
+                'image_path' => 'required|string',
+                'image_type' => 'required|string|in:thumbnails,scenes'
+            ]);
+
+            $imageType = $request->input('image_type');
+            $imageFilename = $request->input('image_path');
+            $imagePath = storage_path('app/public/books/' . $audioBook->id . '/' . $imageType . '/' . $imageFilename);
+
+            if (!file_exists($imagePath)) {
+                $this->updateFullBookVideoProgress($audioBook->id, [
+                    'status' => 'error',
+                    'percent' => 0,
+                    'message' => 'File anh khong ton tai.'
+                ]);
+                return response()->json(['success' => false, 'error' => 'File anh khong ton tai: ' . $imageFilename], 404);
+            }
+
+            $ffmpeg = env('FFMPEG_PATH', 'ffmpeg');
+            $ffprobe = env('FFPROBE_PATH', 'ffprobe');
+            $bookDir = storage_path('app/public/books/' . $audioBook->id);
+            $mp4Dir = $bookDir . '/mp4';
+            $tempDir = storage_path('app/temp/fullbook_' . $audioBook->id . '_' . time());
+
+            if (!is_dir($mp4Dir)) mkdir($mp4Dir, 0755, true);
+            if (!is_dir($tempDir)) mkdir($tempDir, 0755, true);
+
+            // ============================================================
+            // Step 1: Collect all audio files (description + chapters)
+            // ============================================================
+            $this->updateFullBookVideoProgress($audioBook->id, [
+                'status' => 'processing',
+                'percent' => 2,
+                'message' => 'Dang kiem tra cac file audio...'
+            ]);
+            $this->updateFullBookVideoLog($audioBook->id, 'Bat dau kiem tra audio files...');
+
+            $audioFiles = [];
+
+            // Add description audio first (if exists)
+            if ($audioBook->description_audio) {
+                $descAudioPath = storage_path('app/public/' . $audioBook->description_audio);
+                if (file_exists($descAudioPath)) {
+                    $audioFiles[] = $descAudioPath;
+                    $this->updateFullBookVideoLog($audioBook->id, 'Co audio gioi thieu: ' . basename($descAudioPath));
+                }
+            }
+
+            // Add chapter full audio files in order
+            $chapters = $audioBook->chapters()->orderBy('chapter_number')->get();
+            $missingChapters = [];
+
+            foreach ($chapters as $chapter) {
+                $chapterNumPadded = str_pad($chapter->chapter_number, 3, '0', STR_PAD_LEFT);
+                $fullAudioPath = $bookDir . "/c_{$chapterNumPadded}_full.mp3";
+
+                if (file_exists($fullAudioPath)) {
+                    $audioFiles[] = $fullAudioPath;
+                } else {
+                    $missingChapters[] = $chapter->chapter_number;
+                }
+            }
+
+            if (!empty($missingChapters)) {
+                $missing = implode(', ', $missingChapters);
+                $this->updateFullBookVideoProgress($audioBook->id, [
+                    'status' => 'error',
+                    'percent' => 0,
+                    'message' => "Thieu file TTS full cho chuong: {$missing}"
+                ]);
+                $this->updateFullBookVideoLog($audioBook->id, "LOI: Thieu file TTS full cho chuong: {$missing}");
+                $this->cleanupDirectory($tempDir);
+                return response()->json([
+                    'success' => false,
+                    'error' => "Thieu file TTS full cho chuong: {$missing}. Vui long tao TTS va ghep full cho tat ca chuong truoc."
+                ], 400);
+            }
+
+            if (count($audioFiles) < 1) {
+                $this->updateFullBookVideoProgress($audioBook->id, [
+                    'status' => 'error',
+                    'percent' => 0,
+                    'message' => 'Khong co file audio nao.'
+                ]);
+                $this->cleanupDirectory($tempDir);
+                return response()->json(['success' => false, 'error' => 'Khong co file audio nao de ghep.'], 400);
+            }
+
+            $this->updateFullBookVideoLog($audioBook->id, 'Tong so file audio: ' . count($audioFiles));
+
+            // ============================================================
+            // Step 2: Concatenate all audio files into one
+            // ============================================================
+            $this->updateFullBookVideoProgress($audioBook->id, [
+                'status' => 'processing',
+                'percent' => 5,
+                'message' => 'Dang ghep tat ca audio thanh 1 file...'
+            ]);
+
+            $concatListPath = $tempDir . '/concat_list.txt';
+            $concatContent = '';
+            foreach ($audioFiles as $af) {
+                $concatContent .= "file " . escapeshellarg($af) . "\n";
+            }
+            file_put_contents($concatListPath, $concatContent);
+
+            $mergedVoicePath = $tempDir . '/merged_voice.mp3';
+            $concatCmd = sprintf(
+                '%s -y -f concat -safe 0 -i %s -c:a libmp3lame -b:a 192k %s 2>&1',
+                $ffmpeg,
+                escapeshellarg($concatListPath),
+                escapeshellarg($mergedVoicePath)
+            );
+
+            $this->updateFullBookVideoLog($audioBook->id, 'FFmpeg: bat dau ghep audio...');
+            Log::info("Full book concat command", ['cmd' => $concatCmd]);
+            exec($concatCmd, $concatOutput, $concatReturnCode);
+
+            foreach (array_slice($concatOutput, -10) as $line) {
+                $this->updateFullBookVideoLog($audioBook->id, trim((string) $line));
+            }
+
+            if ($concatReturnCode !== 0 || !file_exists($mergedVoicePath)) {
+                $this->updateFullBookVideoProgress($audioBook->id, [
+                    'status' => 'error',
+                    'percent' => 0,
+                    'message' => 'FFmpeg khong the ghep audio.'
+                ]);
+                $this->updateFullBookVideoLog($audioBook->id, 'FFmpeg: ghep audio that bai');
+                $this->cleanupDirectory($tempDir);
+                return response()->json(['success' => false, 'error' => 'FFmpeg khong the ghep audio.'], 500);
+            }
+
+            // Get merged voice duration
+            $dCmd = sprintf(
+                '%s -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 %s',
+                $ffprobe,
+                escapeshellarg($mergedVoicePath)
+            );
+            $dOut = [];
+            exec($dCmd, $dOut);
+            $voiceDuration = !empty($dOut) ? (float) $dOut[0] : 0;
+
+            $this->updateFullBookVideoLog($audioBook->id, 'Tong thoi luong voice: ' . round($voiceDuration, 1) . 's');
+            $this->updateFullBookVideoProgress($audioBook->id, [
+                'status' => 'processing',
+                'percent' => 15,
+                'message' => 'Da ghep audio (' . gmdate('H:i:s', (int) $voiceDuration) . '). Dang tron nhac nen...'
+            ]);
+
+            // ============================================================
+            // Step 3: Mix intro music + voice (same logic as description video)
+            // ============================================================
+            $introMusicPath = $audioBook->intro_music
+                ? storage_path('app/public/' . $audioBook->intro_music)
+                : null;
+
+            $hasMusic = $introMusicPath && file_exists($introMusicPath);
+            $introFadeDuration = $hasMusic ? (float) ($audioBook->intro_fade_duration ?? 3) : 0;
+            $outroExtendDuration = $hasMusic ? (float) ($audioBook->outro_extend_duration ?? 5) : 0;
+            $outroFadeDuration = $hasMusic ? (float) ($audioBook->outro_fade_duration ?? 10) : 0;
+            $totalDuration = $introFadeDuration + $voiceDuration + $outroExtendDuration;
+
+            $mixedAudioPath = $tempDir . '/mixed_audio.mp3';
+
+            if ($hasMusic) {
+                $voiceStartTime = $introFadeDuration;
+                $voiceEndTime = $voiceStartTime + $voiceDuration;
+                $introFadeOutDuration = min(1.5, max(0.2, $introFadeDuration * 0.5));
+                $introFadeOutStart = max(0, $voiceStartTime - $introFadeOutDuration);
+                $outroDuration = max(0, $outroExtendDuration);
+                $outroFadeOutDuration = $outroDuration > 0
+                    ? min($outroFadeDuration, max(0.2, $outroDuration))
+                    : 0;
+                $outroFadeOutStart = $voiceEndTime + max(0, $outroDuration - $outroFadeOutDuration);
+
+                if ($outroDuration > 0) {
+                    $musicVolumeExpr = sprintf(
+                        'if(lt(t,%s),1,' .
+                            'if(lt(t,%s),1-(t-%s)/%s,' .
+                            'if(lt(t,%s),0,' .
+                            'if(lt(t,%s),1,' .
+                            'if(lt(t,%s),1-(t-%s)/%s,0)' .
+                            '))))',
+                        round($introFadeOutStart, 2),
+                        round($voiceStartTime, 2),
+                        round($introFadeOutStart, 2),
+                        round($introFadeOutDuration, 2),
+                        round($voiceEndTime, 2),
+                        round($outroFadeOutStart, 2),
+                        round($voiceEndTime + $outroDuration, 2),
+                        round($outroFadeOutStart, 2),
+                        round($outroFadeOutDuration, 2)
+                    );
+                } else {
+                    $musicVolumeExpr = sprintf(
+                        'if(lt(t,%s),1,' .
+                            'if(lt(t,%s),1-(t-%s)/%s,0))',
+                        round($introFadeOutStart, 2),
+                        round($voiceStartTime, 2),
+                        round($introFadeOutStart, 2),
+                        round($introFadeOutDuration, 2)
+                    );
+                }
+
+                $audioFilterComplex = sprintf(
+                    '[0:a]aloop=loop=-1:size=2e+09,atrim=0:%s,' .
+                        'volume=eval=frame:volume=\'%s\',aformat=sample_fmts=fltp[music];' .
+                        '[1:a]adelay=%d|%d,aformat=sample_fmts=fltp[voice];' .
+                        '[music][voice]amix=inputs=2:duration=first:dropout_transition=3[mixout]',
+                    round($totalDuration, 2),
+                    $musicVolumeExpr,
+                    (int) ($voiceStartTime * 1000),
+                    (int) ($voiceStartTime * 1000)
+                );
+
+                $mixCmd = sprintf(
+                    '%s -y -i %s -i %s -filter_complex "%s" -map "[mixout]" -c:a libmp3lame -b:a 192k %s 2>&1',
+                    $ffmpeg,
+                    escapeshellarg($introMusicPath),
+                    escapeshellarg($mergedVoicePath),
+                    $audioFilterComplex,
+                    escapeshellarg($mixedAudioPath)
+                );
+
+                $this->updateFullBookVideoLog($audioBook->id, 'FFmpeg: bat dau tron nhac nen...');
+                Log::info("Full book audio mix command", ['cmd' => $mixCmd]);
+                exec($mixCmd, $mixOutput, $mixReturnCode);
+
+                foreach (array_slice($mixOutput, -10) as $line) {
+                    $this->updateFullBookVideoLog($audioBook->id, trim((string) $line));
+                }
+
+                if ($mixReturnCode !== 0 || !file_exists($mixedAudioPath)) {
+                    $this->updateFullBookVideoProgress($audioBook->id, [
+                        'status' => 'error',
+                        'percent' => 0,
+                        'message' => 'FFmpeg khong the tron nhac nen.'
+                    ]);
+                    $this->updateFullBookVideoLog($audioBook->id, 'FFmpeg: tron nhac that bai');
+                    $this->cleanupDirectory($tempDir);
+                    return response()->json(['success' => false, 'error' => 'FFmpeg khong the tron nhac nen.'], 500);
+                }
+            } else {
+                // No music, just use the merged voice directly
+                copy($mergedVoicePath, $mixedAudioPath);
+                $totalDuration = $voiceDuration;
+            }
+
+            $this->updateFullBookVideoProgress($audioBook->id, [
+                'status' => 'processing',
+                'percent' => 30,
+                'message' => 'Da tron audio. Dang tao video...'
+            ]);
+
+            // ============================================================
+            // Step 4: Create video (image + mixed audio + wave overlay)
+            // ============================================================
+            $outputPath = $mp4Dir . '/full_book.mp4';
+            if (file_exists($outputPath)) {
+                unlink($outputPath);
+            }
+
+            $waveEnabled = $audioBook->wave_enabled ?? false;
+            // Use 720p for chapter videos (faster encoding)
+            $videoWidth = 1280;
+            $videoHeight = 720;
+            $baseFilter = "scale={$videoWidth}:{$videoHeight}:force_original_aspect_ratio=decrease,pad={$videoWidth}:{$videoHeight}:(ow-iw)/2:(oh-ih)/2";
+
+            if ($waveEnabled) {
+                $rawWaveType = $audioBook->wave_type ?? 'cline';
+                $waveTypeMap = ['point' => 'point', 'line' => 'line', 'p2p' => 'p2p', 'cline' => 'cline', 'bar' => 'line'];
+                $waveType = $waveTypeMap[$rawWaveType] ?? 'cline';
+                $wavePosition = $audioBook->wave_position ?? 'bottom';
+                $waveHeight = $audioBook->wave_height ?? 100;
+                $waveColor = ltrim($audioBook->wave_color ?? '#00ff00', '#');
+                $waveOpacity = $audioBook->wave_opacity ?? 0.8;
+
+                switch ($wavePosition) {
+                    case 'top':
+                        $waveY = 20;
+                        break;
+                    case 'center':
+                        $waveY = ($videoHeight - $waveHeight) / 2;
+                        break;
+                    case 'bottom':
+                    default:
+                        $waveY = $videoHeight - $waveHeight - 20;
+                        break;
+                }
+
+                $filterComplex = sprintf(
+                    '[0:v]%s[bg];[1:a]showwaves=s=%dx%d:mode=%s:colors=0x%s@%.1f:rate=15[wave];[bg][wave]overlay=0:%d:format=auto[out]',
+                    $baseFilter,
+                    $videoWidth,
+                    $waveHeight,
+                    $waveType,
+                    $waveColor,
+                    $waveOpacity,
+                    $waveY
+                );
+
+                $videoCmd = sprintf(
+                    '%s -y -loop 1 -framerate 15 -i %s -i %s -filter_complex "%s" -map "[out]" -map 1:a ' .
+                        '-c:v libx264 -preset ultrafast -tune stillimage -crf 28 -c:a aac -b:a 128k ' .
+                        '-pix_fmt yuv420p -shortest -threads 0 -progress pipe:1 -stats %s',
+                    $ffmpeg,
+                    escapeshellarg($imagePath),
+                    escapeshellarg($mixedAudioPath),
+                    $filterComplex,
+                    escapeshellarg($outputPath)
+                );
+            } else {
+                $videoCmd = sprintf(
+                    '%s -y -loop 1 -framerate 1 -i %s -i %s -c:v libx264 -preset ultrafast -tune stillimage -crf 28 ' .
+                        '-c:a aac -b:a 128k -pix_fmt yuv420p -r 15 -shortest -threads 0 -vf "%s" -progress pipe:1 -stats %s',
+                    $ffmpeg,
+                    escapeshellarg($imagePath),
+                    escapeshellarg($mixedAudioPath),
+                    $baseFilter,
+                    escapeshellarg($outputPath)
+                );
+            }
+
+            $this->updateFullBookVideoLog($audioBook->id, 'FFmpeg: bat dau tao video full book...');
+            Log::info("Full book video command", ['cmd' => $videoCmd]);
+
+            $videoResult = $this->runFullBookFfmpegWithProgress(
+                $videoCmd,
+                $audioBook->id,
+                $totalDuration,
+                30,
+                95
+            );
+
+            $this->cleanupDirectory($tempDir);
+
+            if ($videoResult['return_code'] !== 0 || !file_exists($outputPath)) {
+                $this->updateFullBookVideoProgress($audioBook->id, [
+                    'status' => 'error',
+                    'percent' => 0,
+                    'message' => 'FFmpeg khong the tao video.'
+                ]);
+                $this->updateFullBookVideoLog($audioBook->id, 'FFmpeg: tao video that bai');
+                Log::error("FFmpeg full book video failed", [
+                    'return_code' => $videoResult['return_code'],
+                    'output' => implode("\n", array_slice($videoResult['output'], -20))
+                ]);
+                return response()->json(['success' => false, 'error' => 'FFmpeg khong the tao video.'], 500);
+            }
+
+            // Get actual video duration
+            $durationCmd = sprintf(
+                '%s -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 %s',
+                $ffprobe,
+                escapeshellarg($outputPath)
+            );
+            $durationOutput = [];
+            exec($durationCmd, $durationOutput);
+            $videoDuration = !empty($durationOutput) ? (float) $durationOutput[0] : $totalDuration;
+
+            $relativePath = 'books/' . $audioBook->id . '/mp4/full_book.mp4';
+            $audioBook->update([
+                'full_book_video' => $relativePath,
+                'full_book_video_duration' => $videoDuration
+            ]);
+
+            $videoUrl = asset('storage/' . $relativePath);
+
+            $this->updateFullBookVideoProgress($audioBook->id, [
+                'status' => 'completed',
+                'percent' => 100,
+                'message' => 'Hoan tat!',
+                'video_url' => $videoUrl,
+                'video_duration' => $videoDuration
+            ]);
+            $this->updateFullBookVideoLog($audioBook->id, 'Hoan tat! Thoi luong: ' . gmdate('H:i:s', (int) $videoDuration));
+
+            Log::info("Full book video generated", [
+                'audiobook_id' => $audioBook->id,
+                'path' => $relativePath,
+                'duration' => $videoDuration
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'video_url' => $videoUrl,
+                'video_duration' => $videoDuration,
+                'message' => 'Video full book da duoc tao thanh cong!'
+            ]);
+        } catch (\Exception $e) {
+            $this->updateFullBookVideoProgress($audioBook->id, [
+                'status' => 'error',
+                'percent' => 0,
+                'message' => 'Loi: ' . $e->getMessage()
+            ]);
+            $this->updateFullBookVideoLog($audioBook->id, 'Loi: ' . $e->getMessage());
+            Log::error("Generate full book video failed for audiobook {$audioBook->id}: " . $e->getMessage());
+
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Start full book video generation in background.
+     */
+    public function startFullBookVideoJob(Request $request, AudioBook $audioBook)
+    {
+        $this->resetFullBookVideoProgress($audioBook->id);
+
+        $request->validate([
+            'image_path' => 'required|string',
+            'image_type' => 'required|string|in:thumbnails,scenes'
+        ]);
+
+        try {
+            GenerateFullBookVideoJob::dispatch(
+                $audioBook->id,
+                $request->input('image_path'),
+                $request->input('image_type')
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Da nhan yeu cau tao video full book. Dang xu ly...'
+            ]);
+        } catch (\Throwable $e) {
+            $this->updateFullBookVideoProgress($audioBook->id, [
+                'status' => 'error',
+                'percent' => 0,
+                'message' => 'Khong the khoi tao job.'
+            ]);
+            $this->updateFullBookVideoLog($audioBook->id, 'Loi khoi tao job: ' . $e->getMessage());
+            Log::error('Start full book video job failed', [
+                'audiobook_id' => $audioBook->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Get full book video generation progress.
+     */
+    public function getFullBookVideoProgress(AudioBook $audioBook)
+    {
+        $key = "fullbook_video_progress_{$audioBook->id}";
+        $progress = Cache::get($key);
+        $logKey = "fullbook_video_log_{$audioBook->id}";
+        $logs = Cache::get($logKey, []);
+
+        if (!$progress) {
+            return response()->json([
+                'success' => true,
+                'status' => 'idle',
+                'percent' => 0,
+                'message' => '',
+                'completed' => false,
+                'logs' => $logs,
+                'video_url' => null,
+                'video_duration' => null
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'status' => $progress['status'] ?? 'processing',
+            'percent' => $progress['percent'] ?? 0,
+            'message' => $progress['message'] ?? '',
+            'completed' => ($progress['status'] ?? '') === 'completed',
+            'logs' => $logs,
+            'video_url' => $progress['video_url'] ?? null,
+            'video_duration' => $progress['video_duration'] ?? null
+        ]);
+    }
+
+    /**
+     * Delete full book video file.
+     */
+    public function deleteFullBookVideo(AudioBook $audioBook)
+    {
+        try {
+            if ($audioBook->full_book_video) {
+                $filePath = storage_path('app/public/' . $audioBook->full_book_video);
+                if (file_exists($filePath)) {
+                    unlink($filePath);
+                }
+                $audioBook->update([
+                    'full_book_video' => null,
+                    'full_book_video_duration' => null
+                ]);
+                Log::info("Deleted full book video for audiobook {$audioBook->id}");
+            }
+
+            return response()->json(['success' => true, 'message' => 'Da xoa video full book.']);
+        } catch (\Exception $e) {
+            Log::error("Delete full book video failed for audiobook {$audioBook->id}: " . $e->getMessage());
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    // -- Full book video progress helpers --
+
+    private function updateFullBookVideoProgress(int $audioBookId, array $data): void
+    {
+        $payload = array_merge([
+            'status' => 'processing',
+            'percent' => 0,
+            'message' => '',
+            'updated_at' => now()->toIso8601String()
+        ], $data);
+        Cache::put("fullbook_video_progress_{$audioBookId}", $payload, now()->addHours(3));
+    }
+
+    private function resetFullBookVideoProgress(int $audioBookId): void
+    {
+        Cache::forget("fullbook_video_progress_{$audioBookId}");
+        Cache::forget("fullbook_video_log_{$audioBookId}");
+        $this->updateFullBookVideoProgress($audioBookId, [
+            'status' => 'processing',
+            'percent' => 1,
+            'message' => 'Dang khoi tao...'
+        ]);
+    }
+
+    private function updateFullBookVideoLog(int $audioBookId, string $line): void
+    {
+        $key = "fullbook_video_log_{$audioBookId}";
+        $logs = Cache::get($key, []);
+        $timestamp = now()->format('H:i:s');
+        $logs[] = "[{$timestamp}] {$line}";
+        if (count($logs) > 300) {
+            $logs = array_slice($logs, -300);
+        }
+        Cache::put($key, $logs, now()->addHours(3));
+    }
+
+    private function runFullBookFfmpegWithProgress(
+        string $command,
+        int $audioBookId,
+        float $totalDuration,
+        int $baseStart,
+        int $baseEnd
+    ): array {
+        $output = [];
+        $descriptorSpec = [
+            0 => ['pipe', 'r'],
+            1 => ['pipe', 'w'],
+            2 => ['pipe', 'w']
+        ];
+
+        $process = proc_open($command, $descriptorSpec, $pipes);
+        if (!is_resource($process)) {
+            $this->updateFullBookVideoLog($audioBookId, 'FFmpeg: khong the khoi tao process');
+            return ['return_code' => 1, 'output' => []];
+        }
+
+        fclose($pipes[0]);
+        stream_set_blocking($pipes[1], false);
+        stream_set_blocking($pipes[2], false);
+
+        $lastPercent = 0;
+        $lastLogAt = time();
+        $buffer = '';
+
+        while (true) {
+            $read = [$pipes[1], $pipes[2]];
+            $write = null;
+            $except = null;
+            stream_select($read, $write, $except, 1);
+
+            foreach ($read as $stream) {
+                $data = stream_get_contents($stream);
+                if ($data === false || $data === '') continue;
+                $buffer .= $data;
+                $lines = explode("\n", $buffer);
+                $buffer = array_pop($lines);
+
+                foreach ($lines as $line) {
+                    $line = trim($line);
+                    if ($line === '') continue;
+                    $output[] = $line;
+
+                    if (str_starts_with($line, 'out_time_ms=')) {
+                        $value = (int) str_replace('out_time_ms=', '', $line);
+                        if ($totalDuration > 0) {
+                            $percent = $baseStart + (int) round(($value / ($totalDuration * 1000000)) * ($baseEnd - $baseStart));
+                            $percent = min($baseEnd, max($baseStart, $percent));
+                            if ($percent !== $lastPercent) {
+                                $lastPercent = $percent;
+                                $this->updateFullBookVideoProgress($audioBookId, [
+                                    'status' => 'processing',
+                                    'percent' => $percent,
+                                    'message' => 'Dang tao video...'
+                                ]);
+                            }
+                        }
+                    }
+
+                    if (str_starts_with($line, 'frame=') || str_starts_with($line, 'fps=') || str_starts_with($line, 'speed=')) {
+                        if (time() - $lastLogAt >= 3) {
+                            $this->updateFullBookVideoLog($audioBookId, "FFmpeg: {$line}");
+                            $lastLogAt = time();
+                        }
+                    }
+                }
+            }
+
+            $status = proc_get_status($process);
+            if (!$status['running']) break;
+        }
+
+        $remaining = trim($buffer);
+        if ($remaining !== '') $output[] = $remaining;
+
+        foreach ([$pipes[1], $pipes[2]] as $pipe) {
+            $leftover = stream_get_contents($pipe);
+            if ($leftover) {
+                foreach (explode("\n", $leftover) as $line) {
+                    $line = trim($line);
+                    if ($line !== '') $output[] = $line;
+                }
+            }
+            fclose($pipe);
+        }
+
+        $returnCode = proc_close($process);
+        return ['return_code' => $returnCode, 'output' => $output];
+    }
+
+    // ====================================================================
+    // VIDEO SEGMENTS (batch: gom chương tùy chọn → nhiều video)
+    // ====================================================================
+
+    public function getVideoSegments(AudioBook $audioBook)
+    {
+        $segments = $audioBook->videoSegments()->orderBy('sort_order')->get();
+        return response()->json([
+            'success' => true,
+            'segments' => $segments->map(function ($seg) {
+                $data = $seg->toArray();
+                if ($seg->video_path) {
+                    $data['video_url'] = asset('storage/' . $seg->video_path);
+                }
+                return $data;
+            })
+        ]);
+    }
+
+    public function saveVideoSegments(Request $request, AudioBook $audioBook)
+    {
+        $request->validate([
+            'segments' => 'required|array',
+            'segments.*.name' => 'required|string|max:255',
+            'segments.*.chapters' => 'required|array|min:1',
+            'segments.*.chapters.*' => 'integer|min:0',
+            'segments.*.image_path' => 'nullable|string',
+            'segments.*.image_type' => 'nullable|string|in:thumbnails,scenes,chapter_covers',
+            'segments.*.sort_order' => 'integer|min:0',
+        ]);
+
+        $incoming = collect($request->input('segments'));
+        $incomingIds = $incoming->pluck('id')->filter()->toArray();
+
+        // Delete segments not in the incoming list (that are not completed with video)
+        $audioBook->videoSegments()
+            ->whereNotIn('id', $incomingIds)
+            ->each(function ($seg) {
+                if ($seg->video_path) {
+                    $filePath = storage_path('app/public/' . $seg->video_path);
+                    if (file_exists($filePath)) unlink($filePath);
+                }
+                $seg->delete();
+            });
+
+        $savedSegments = [];
+        foreach ($incoming as $idx => $segData) {
+            $attrs = [
+                'name' => $segData['name'],
+                'chapters' => $segData['chapters'],
+                'image_path' => $segData['image_path'] ?? null,
+                'image_type' => $segData['image_type'] ?? null,
+                'sort_order' => $segData['sort_order'] ?? $idx,
+            ];
+
+            if (!empty($segData['id'])) {
+                $segment = AudioBookVideoSegment::where('id', $segData['id'])
+                    ->where('audio_book_id', $audioBook->id)
+                    ->first();
+                if ($segment) {
+                    $segment->update($attrs);
+                    $savedSegments[] = $segment;
+                    continue;
+                }
+            }
+
+            $savedSegments[] = $audioBook->videoSegments()->create($attrs);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Da luu ' . count($savedSegments) . ' segments.',
+            'segments' => collect($savedSegments)->map(function ($seg) {
+                $data = $seg->toArray();
+                if ($seg->video_path) $data['video_url'] = asset('storage/' . $seg->video_path);
+                return $data;
+            })
+        ]);
+    }
+
+    public function startBatchVideoGeneration(Request $request, AudioBook $audioBook)
+    {
+        $segmentIds = $request->input('segment_ids', []);
+
+        // If specific IDs provided, use those; otherwise fall back to all pending/error
+        if (!empty($segmentIds)) {
+            $targetSegments = $audioBook->videoSegments()
+                ->whereIn('id', $segmentIds)
+                ->get();
+
+            if ($targetSegments->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Khong tim thay segment nao.'
+                ], 400);
+            }
+
+            // Reset selected segments to pending (even completed ones - allow re-generate)
+            $audioBook->videoSegments()
+                ->whereIn('id', $segmentIds)
+                ->update(['status' => 'pending', 'error_message' => null]);
+
+            $count = $targetSegments->count();
+        } else {
+            $count = $audioBook->videoSegments()
+                ->whereIn('status', ['pending', 'error'])
+                ->count();
+
+            if ($count === 0) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Khong co segment nao can xu ly. Tat ca da completed.'
+                ], 400);
+            }
+
+            // Reset error segments to pending
+            $audioBook->videoSegments()
+                ->where('status', 'error')
+                ->update(['status' => 'pending', 'error_message' => null]);
+        }
+
+        // Reset cache
+        Cache::forget("batch_video_progress_{$audioBook->id}");
+        Cache::forget("batch_video_log_{$audioBook->id}");
+
+        Cache::put("batch_video_progress_{$audioBook->id}", [
+            'status' => 'processing',
+            'percent' => 1,
+            'message' => 'Dang khoi tao batch...',
+            'current_segment_id' => null,
+            'current_segment_index' => 0,
+            'total_segments' => $count,
+            'updated_at' => now()->toIso8601String()
+        ], now()->addHours(5));
+
+        GenerateBatchVideoJob::dispatch($audioBook->id, $segmentIds);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Da bat dau xu ly {$count} segments."
+        ]);
+    }
+
+    public function getBatchVideoProgress(AudioBook $audioBook)
+    {
+        $progress = Cache::get("batch_video_progress_{$audioBook->id}");
+        $logs = Cache::get("batch_video_log_{$audioBook->id}", []);
+
+        // Always return fresh segment data from DB
+        $segments = $audioBook->videoSegments()->orderBy('sort_order')->get()->map(function ($seg) {
+            $data = $seg->toArray();
+            if ($seg->video_path) $data['video_url'] = asset('storage/' . $seg->video_path);
+            return $data;
+        });
+
+        return response()->json([
+            'success' => true,
+            'status' => $progress['status'] ?? 'idle',
+            'percent' => $progress['percent'] ?? 0,
+            'message' => $progress['message'] ?? '',
+            'current_segment_id' => $progress['current_segment_id'] ?? null,
+            'current_segment_index' => $progress['current_segment_index'] ?? 0,
+            'total_segments' => $progress['total_segments'] ?? 0,
+            'completed' => ($progress['status'] ?? '') === 'completed',
+            'logs' => $logs,
+            'segments' => $segments,
+        ]);
+    }
+
+    public function deleteVideoSegment(AudioBook $audioBook, $segmentId)
+    {
+        $segment = AudioBookVideoSegment::where('id', $segmentId)
+            ->where('audio_book_id', $audioBook->id)
+            ->first();
+
+        if (!$segment) {
+            return response()->json(['success' => false, 'error' => 'Segment khong ton tai.'], 404);
+        }
+
+        if ($segment->video_path) {
+            $filePath = storage_path('app/public/' . $segment->video_path);
+            if (file_exists($filePath)) unlink($filePath);
+        }
+
+        $segment->delete();
+
+        return response()->json(['success' => true, 'message' => 'Da xoa segment.']);
     }
 }

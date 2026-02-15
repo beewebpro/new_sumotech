@@ -24,20 +24,21 @@ class YouTubeChannelController extends Controller
         }
 
         $channels = YoutubeChannel::withCount([
-                'audioBooks as total_videos' => function ($q) {
-                    $q->whereHas('chapters', fn($c) => $c->whereNotNull('video_path'));
-                },
-                'audioBooks as published_videos' => function ($q) {
-                    $q->whereHas('chapters', fn($c) => $c->whereNotNull('youtube_video_id'));
-                },
-            ])
+            'audioBooks as total_videos' => function ($q) {
+                $q->whereHas('chapters', fn($c) => $c->whereNotNull('video_path'));
+            },
+            'audioBooks as published_videos' => function ($q) {
+                $q->whereHas('chapters', fn($c) => $c->whereNotNull('youtube_video_id'));
+            },
+        ])
             ->orderByDesc('created_at')
             ->paginate($perPage);
 
         // Calculate durations per channel
         foreach ($channels as $channel) {
             $chapters = \App\Models\AudioBookChapter::whereIn(
-                'audio_book_id', $channel->audioBooks()->pluck('id')
+                'audio_book_id',
+                $channel->audioBooks()->pluck('id')
             );
             $channel->total_duration_seconds = (clone $chapters)->sum('total_duration');
             $channel->published_duration_seconds = (clone $chapters)
@@ -87,6 +88,8 @@ class YouTubeChannelController extends Controller
     {
         $search = request()->get('search', '');
         $status = request()->get('status', '');
+        $abSearch = request()->get('ab_search', '');
+        $abStatus = request()->get('ab_status', '');
         $page = request()->get('page', 1);
         $perPage = request()->get('per_page', 10);
 
@@ -119,11 +122,57 @@ class YouTubeChannelController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
-        $audioBooks = AudioBook::where('youtube_channel_id', $youtubeChannel->id)
+        $audioBooksQuery = AudioBook::where('youtube_channel_id', $youtubeChannel->id);
+
+        if ($abSearch) {
+            $audioBooksQuery->where(function ($q) use ($abSearch) {
+                $q->where('title', 'like', "%{$abSearch}%")
+                    ->orWhere('author', 'like', "%{$abSearch}%")
+                    ->orWhere('category', 'like', "%{$abSearch}%");
+            });
+        }
+
+        if ($abStatus === 'error') {
+            $audioBooksQuery->whereHas('chapters', function ($q) {
+                $q->where('status', 'error');
+            });
+        } elseif ($abStatus === 'completed') {
+            $audioBooksQuery->whereHas('chapters')
+                ->whereDoesntHave('chapters', function ($q) {
+                    $q->whereNull('video_path');
+                });
+        } elseif ($abStatus === 'processing') {
+            $audioBooksQuery->whereHas('chapters', function ($q) {
+                $q->whereNotNull('audio_file');
+            })->whereHas('chapters', function ($q) {
+                $q->whereNull('video_path');
+            })->whereDoesntHave('chapters', function ($q) {
+                $q->where('status', 'error');
+            });
+        } elseif ($abStatus === 'not_started') {
+            $audioBooksQuery->whereDoesntHave('chapters', function ($q) {
+                $q->whereNotNull('audio_file');
+            });
+        }
+
+        $audioBooks = $audioBooksQuery
+            ->withCount([
+                'chapters as chapters_total',
+                'chapters as chapters_with_video' => function ($q) {
+                    $q->whereNotNull('video_path');
+                },
+                'chapters as chapters_with_audio' => function ($q) {
+                    $q->whereNotNull('audio_file');
+                },
+                'chapters as chapters_with_error' => function ($q) {
+                    $q->where('status', 'error');
+                },
+            ])
+            ->withSum('chapters as total_duration_seconds', 'total_duration')
             ->orderByDesc('created_at')
             ->paginate(10);
 
-        return view('youtube_channels.show', compact('youtubeChannel', 'projects', 'referenceChannels', 'audioBooks', 'search', 'status'));
+        return view('youtube_channels.show', compact('youtubeChannel', 'projects', 'referenceChannels', 'audioBooks', 'search', 'status', 'abSearch', 'abStatus'));
     }
 
     public function edit(YoutubeChannel $youtubeChannel)

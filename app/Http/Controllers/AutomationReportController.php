@@ -47,6 +47,13 @@ class AutomationReportController extends Controller
         $perPage = in_array($request->get('per_page'), [10, 20, 30, 50, 100]) ? (int) $request->get('per_page') : 30;
         $logs = $query->latest('started_at')->paginate($perPage)->withQueryString();
 
+        $logs->getCollection()->transform(function ($log) {
+            if ($log->status === 'running' && $log->started_at) {
+                $log->running_duration_seconds = $log->started_at->diffInSeconds(now());
+            }
+            return $log;
+        });
+
         // Filter options
         $commandNames = AutomationLog::select('command_name')->distinct()->pluck('command_name');
 

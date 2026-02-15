@@ -61,31 +61,39 @@
 
                                 {{-- Content Type Badge --}}
                                 <div class="mt-2">
-                                    @if($youtubeChannel->content_type === 'audiobook')
-                                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-100 text-green-700 text-sm font-medium rounded-lg">
+                                    @if ($youtubeChannel->content_type === 'audiobook')
+                                        <span
+                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-100 text-green-700 text-sm font-medium rounded-lg">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                                             </svg>
                                             Audiobook Channel
                                         </span>
                                     @elseif($youtubeChannel->content_type === 'dub')
-                                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 text-purple-700 text-sm font-medium rounded-lg">
+                                        <span
+                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 text-purple-700 text-sm font-medium rounded-lg">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                             </svg>
                                             Dub (Lồng tiếng) Channel
                                         </span>
                                     @elseif($youtubeChannel->content_type === 'self_creative')
-                                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-100 text-orange-700 text-sm font-medium rounded-lg">
+                                        <span
+                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-100 text-orange-700 text-sm font-medium rounded-lg">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                                             </svg>
                                             Self Creative Channel
                                         </span>
                                     @else
-                                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg">
+                                        <span
+                                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                             </svg>
                                             Content Type Not Set
                                         </span>
@@ -136,19 +144,19 @@
                     <div class="p-6 text-gray-900">
                         <div class="border-b border-gray-200 mb-4">
                             <nav class="-mb-px flex gap-6" aria-label="Tabs">
-                                @if($youtubeChannel->content_type === 'dub')
+                                @if ($youtubeChannel->content_type === 'dub')
                                     <button id="tabDubsyncBtn"
                                         class="tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
                                         📺 Lồng tiếng
                                     </button>
                                 @endif
-                                @if($youtubeChannel->content_type === 'audiobook')
+                                @if ($youtubeChannel->content_type === 'audiobook')
                                     <button id="tabAudiobooksBtn"
                                         class="tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
                                         📚 Audio books
                                     </button>
                                 @endif
-                                @if($youtubeChannel->content_type === 'self_creative')
+                                @if ($youtubeChannel->content_type === 'self_creative')
                                     <button id="tabSelfCreativeBtn"
                                         class="tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm">
                                         ✨ Nội dung sáng tạo
@@ -157,402 +165,624 @@
                             </nav>
                         </div>
 
-                        @if($youtubeChannel->content_type === 'dub')
-                        <div id="tabDubsync" class="tab-content">
-                            <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-lg font-semibold">Lồng tiếng</h3>
-                                <div class="flex items-center gap-2">
-                                    <button id="bulkTranscriptBtn" type="button"
-                                        class="bg-green-100 text-green-700 font-semibold py-2 px-4 rounded-lg transition duration-200 opacity-60 cursor-not-allowed"
-                                        disabled>
-                                        Get transcript
-                                    </button>
-                                    <button id="bulkDeleteBtn" type="button"
-                                        class="bg-red-100 text-red-700 font-semibold py-2 px-4 rounded-lg transition duration-200 opacity-60 cursor-not-allowed"
-                                        disabled>
-                                        Delete selected
-                                    </button>
-                                    @if($youtubeChannel->content_type === 'dub')
-                                        <form action="{{ route('youtube-channels.fetch.videos', $youtubeChannel) }}"
-                                            method="POST">
-                                            @csrf
-                                            <button type="submit"
-                                                class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
-                                                Fetch video
-                                            </button>
-                                        </form>
-                                    @endif
-                                    <button id="newVideoBtnInline"
-                                        class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
-                                        + New Video
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- Filter Section -->
-                            <div class="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                                <form method="GET" action="{{ route('youtube-channels.show', $youtubeChannel) }}"
-                                    class="flex gap-4 items-end flex-wrap">
-                                    <div class="flex-1 min-w-64">
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Search by name or video
-                                            ID</label>
-                                        <input type="text" name="search" placeholder="Enter video name or ID..."
-                                            value="{{ $search }}"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500">
-                                    </div>
-                                    <div class="flex-1 min-w-48">
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Filter by Status</label>
-                                        <select name="status"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500">
-                                            <option value="">All Status</option>
-                                            <option value="new" @if ($status === 'new') selected @endif>New
-                                            </option>
-                                            <option value="pending" @if ($status === 'pending') selected @endif>
-                                                Pending</option>
-                                            <option value="processing" @if ($status === 'processing') selected @endif>
-                                                Processing</option>
-                                            <option value="transcribed" @if ($status === 'transcribed') selected @endif>
-                                                Transcribed</option>
-                                            <option value="translated" @if ($status === 'translated') selected @endif>
-                                                Translated</option>
-                                            <option value="tts_generated" @if ($status === 'tts_generated') selected @endif>
-                                                TTS Generated</option>
-                                            <option value="aligned" @if ($status === 'aligned') selected @endif>
-                                                Aligned</option>
-                                            <option value="merged" @if ($status === 'merged') selected @endif>Merged
-                                            </option>
-                                            <option value="completed" @if ($status === 'completed') selected @endif>
-                                                Completed</option>
-                                            <option value="error" @if ($status === 'error') selected @endif>Error
-                                            </option>
-                                        </select>
-                                    </div>
-                                    <div class="flex gap-2">
-                                        <button type="submit"
-                                            class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium">
-                                            Filter
-                                        </button>
-                                        <a href="{{ route('youtube-channels.show', $youtubeChannel) }}"
-                                            class="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg text-sm font-medium">
-                                            Clear
-                                        </a>
-                                    </div>
-                                </form>
-                            </div>
-
-                            @if ($projects->count() === 0)
-                                <div class="text-center py-8 text-gray-600">No videos yet.</div>
-                            @else
-                                <div class="mb-4 flex items-center justify-end">
+                        @if ($youtubeChannel->content_type === 'dub')
+                            <div id="tabDubsync" class="tab-content">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-lg font-semibold">Lồng tiếng</h3>
                                     <div class="flex items-center gap-2">
-                                        <label for="perPageSelect" class="text-sm text-gray-600">Items per page:</label>
-                                        <select id="perPageSelect"
-                                            class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500">
-                                            <option value="10" @if (request('per_page') == 10 || request('per_page') === null) selected @endif>10
-                                            </option>
-                                            <option value="20" @if (request('per_page') == 20) selected @endif>20
-                                            </option>
-                                            <option value="50" @if (request('per_page') == 50) selected @endif>50
-                                            </option>
-                                            <option value="100" @if (request('per_page') == 100) selected @endif>100
-                                            </option>
-                                        </select>
+                                        <button id="bulkTranscriptBtn" type="button"
+                                            class="bg-green-100 text-green-700 font-semibold py-2 px-4 rounded-lg transition duration-200 opacity-60 cursor-not-allowed"
+                                            disabled>
+                                            Get transcript
+                                        </button>
+                                        <button id="bulkDeleteBtn" type="button"
+                                            class="bg-red-100 text-red-700 font-semibold py-2 px-4 rounded-lg transition duration-200 opacity-60 cursor-not-allowed"
+                                            disabled>
+                                            Delete selected
+                                        </button>
+                                        @if ($youtubeChannel->content_type === 'dub')
+                                            <form action="{{ route('youtube-channels.fetch.videos', $youtubeChannel) }}"
+                                                method="POST">
+                                                @csrf
+                                                <button type="submit"
+                                                    class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
+                                                    Fetch video
+                                                </button>
+                                            </form>
+                                        @endif
+                                        <button id="newVideoBtnInline"
+                                            class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
+                                            + New Video
+                                        </button>
                                     </div>
                                 </div>
-                                <form id="bulkDeleteForm"
-                                    action="{{ route('youtube-channels.projects.bulk.destroy', $youtubeChannel) }}"
-                                    method="POST" class="hidden">
-                                    @csrf
-                                    <div id="bulkDeleteInputs"></div>
-                                </form>
-                                <div class="overflow-x-hidden">
-                                    <table class="w-full table-fixed divide-y divide-gray-200">
-                                        <thead class="bg-gray-50">
-                                            <tr>
-                                                <th
-                                                    class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">
-                                                    <input id="selectAllProjects" type="checkbox"
-                                                        class="rounded border-gray-300 text-red-600 focus:ring-red-500" />
-                                                </th>
-                                                <th
-                                                    class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-2/5">
-                                                    Video</th>
-                                                <th
-                                                    class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/5">
-                                                    Duration</th>
-                                                <th
-                                                    class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/6">
-                                                    Status</th>
-                                                <th
-                                                    class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/6">
-                                                    Created</th>
-                                                <th
-                                                    class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase w-1/6">
-                                                    Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="bg-white divide-y divide-gray-200">
-                                            @foreach ($projects as $project)
-                                                <tr class="cursor-pointer hover:bg-gray-50"
-                                                    data-href="{{ route('projects.edit', $project) }}"
-                                                    data-transcript-url="{{ route('projects.get.transcript.async', $project) }}"
-                                                    data-status="{{ $project->status }}">
-                                                    <td class="px-4 py-3 align-top">
-                                                        <input type="checkbox" data-project-id="{{ $project->id }}"
-                                                            class="project-checkbox rounded border-gray-300 text-red-600 focus:ring-red-500" />
-                                                    </td>
-                                                    <td class="px-4 py-3 text-sm text-gray-900 align-top">
-                                                        <div class="flex items-start gap-3">
-                                                            @if ($project->youtube_thumbnail)
-                                                                <img src="{{ $project->youtube_thumbnail }}"
-                                                                    alt="Thumbnail"
-                                                                    class="w-12 h-8 rounded object-cover border flex-shrink-0">
+
+                                <!-- Filter Section -->
+                                <div class="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                    <form method="GET" action="{{ route('youtube-channels.show', $youtubeChannel) }}"
+                                        class="flex gap-4 items-end flex-wrap">
+                                        <div class="flex-1 min-w-64">
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Search by name or
+                                                video
+                                                ID</label>
+                                            <input type="text" name="search" placeholder="Enter video name or ID..."
+                                                value="{{ $search }}"
+                                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500">
+                                        </div>
+                                        <div class="flex-1 min-w-48">
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Filter by
+                                                Status</label>
+                                            <select name="status"
+                                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500">
+                                                <option value="">All Status</option>
+                                                <option value="new" @if ($status === 'new') selected @endif>
+                                                    New
+                                                </option>
+                                                <option value="pending" @if ($status === 'pending') selected @endif>
+                                                    Pending</option>
+                                                <option value="processing"
+                                                    @if ($status === 'processing') selected @endif>
+                                                    Processing</option>
+                                                <option value="transcribed"
+                                                    @if ($status === 'transcribed') selected @endif>
+                                                    Transcribed</option>
+                                                <option value="translated"
+                                                    @if ($status === 'translated') selected @endif>
+                                                    Translated</option>
+                                                <option value="tts_generated"
+                                                    @if ($status === 'tts_generated') selected @endif>
+                                                    TTS Generated</option>
+                                                <option value="aligned" @if ($status === 'aligned') selected @endif>
+                                                    Aligned</option>
+                                                <option value="merged" @if ($status === 'merged') selected @endif>
+                                                    Merged
+                                                </option>
+                                                <option value="completed"
+                                                    @if ($status === 'completed') selected @endif>
+                                                    Completed</option>
+                                                <option value="error" @if ($status === 'error') selected @endif>
+                                                    Error
+                                                </option>
+                                            </select>
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <button type="submit"
+                                                class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium">
+                                                Filter
+                                            </button>
+                                            <a href="{{ route('youtube-channels.show', $youtubeChannel) }}"
+                                                class="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg text-sm font-medium">
+                                                Clear
+                                            </a>
+                                        </div>
+                                    </form>
+                                </div>
+
+                                @if ($projects->count() === 0)
+                                    <div class="text-center py-8 text-gray-600">No videos yet.</div>
+                                @else
+                                    <div class="mb-4 flex items-center justify-end">
+                                        <div class="flex items-center gap-2">
+                                            <label for="perPageSelect" class="text-sm text-gray-600">Items per
+                                                page:</label>
+                                            <select id="perPageSelect"
+                                                class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500">
+                                                <option value="10" @if (request('per_page') == 10 || request('per_page') === null) selected @endif>
+                                                    10
+                                                </option>
+                                                <option value="20" @if (request('per_page') == 20) selected @endif>
+                                                    20
+                                                </option>
+                                                <option value="50" @if (request('per_page') == 50) selected @endif>
+                                                    50
+                                                </option>
+                                                <option value="100" @if (request('per_page') == 100) selected @endif>
+                                                    100
+                                                </option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <form id="bulkDeleteForm"
+                                        action="{{ route('youtube-channels.projects.bulk.destroy', $youtubeChannel) }}"
+                                        method="POST" class="hidden">
+                                        @csrf
+                                        <div id="bulkDeleteInputs"></div>
+                                    </form>
+                                    <div class="overflow-x-hidden">
+                                        <table class="w-full table-fixed divide-y divide-gray-200">
+                                            <thead class="bg-gray-50">
+                                                <tr>
+                                                    <th
+                                                        class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12">
+                                                        <input id="selectAllProjects" type="checkbox"
+                                                            class="rounded border-gray-300 text-red-600 focus:ring-red-500" />
+                                                    </th>
+                                                    <th
+                                                        class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-2/5">
+                                                        Video</th>
+                                                    <th
+                                                        class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/5">
+                                                        Duration</th>
+                                                    <th
+                                                        class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/6">
+                                                        Status</th>
+                                                    <th
+                                                        class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/6">
+                                                        Created</th>
+                                                    <th
+                                                        class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase w-1/6">
+                                                        Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="bg-white divide-y divide-gray-200">
+                                                @foreach ($projects as $project)
+                                                    <tr class="cursor-pointer hover:bg-gray-50"
+                                                        data-href="{{ route('projects.edit', $project) }}"
+                                                        data-transcript-url="{{ route('projects.get.transcript.async', $project) }}"
+                                                        data-status="{{ $project->status }}">
+                                                        <td class="px-4 py-3 align-top">
+                                                            <input type="checkbox" data-project-id="{{ $project->id }}"
+                                                                class="project-checkbox rounded border-gray-300 text-red-600 focus:ring-red-500" />
+                                                        </td>
+                                                        <td class="px-4 py-3 text-sm text-gray-900 align-top">
+                                                            <div class="flex items-start gap-3">
+                                                                @if ($project->youtube_thumbnail)
+                                                                    <img src="{{ $project->youtube_thumbnail }}"
+                                                                        alt="Thumbnail"
+                                                                        class="w-12 h-8 rounded object-cover border flex-shrink-0">
+                                                                @else
+                                                                    <div
+                                                                        class="w-12 h-8 rounded bg-gray-100 flex items-center justify-center text-gray-400 flex-shrink-0">
+                                                                        <i class="ri-image-line"></i>
+                                                                    </div>
+                                                                @endif
+                                                                <div class="min-w-0">
+                                                                    <div class="font-medium break-words">
+                                                                        {{ $project->youtube_title_vi ?? ($project->youtube_title ?? $project->video_id) }}
+                                                                    </div>
+                                                                    @if ($project->youtube_url)
+                                                                        <a href="{{ $project->youtube_url }}"
+                                                                            target="_blank"
+                                                                            class="text-xs text-red-600 hover:text-red-700 break-words">Open
+                                                                            video</a>
+                                                                    @endif
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td class="px-4 py-3 text-sm text-gray-600 align-top">
+                                                            {{ $project->youtube_duration ?? '—' }}
+                                                        </td>
+                                                        <td class="px-4 py-3 text-sm text-gray-600 align-top">
+                                                            @php
+                                                                $statusColors = [
+                                                                    'new' =>
+                                                                        'bg-blue-100 text-blue-800 border-blue-200',
+                                                                    'pending' =>
+                                                                        'bg-yellow-100 text-yellow-800 border-yellow-200',
+                                                                    'processing' =>
+                                                                        'bg-purple-100 text-purple-800 border-purple-200',
+                                                                    'transcribed' =>
+                                                                        'bg-cyan-100 text-cyan-800 border-cyan-200',
+                                                                    'translated' =>
+                                                                        'bg-indigo-100 text-indigo-800 border-indigo-200',
+                                                                    'tts_generated' =>
+                                                                        'bg-pink-100 text-pink-800 border-pink-200',
+                                                                    'aligned' =>
+                                                                        'bg-teal-100 text-teal-800 border-teal-200',
+                                                                    'merged' =>
+                                                                        'bg-lime-100 text-lime-800 border-lime-200',
+                                                                    'completed' =>
+                                                                        'bg-green-100 text-green-800 border-green-200',
+                                                                    'error' => 'bg-red-100 text-red-800 border-red-200',
+                                                                ];
+                                                                $statusClass =
+                                                                    $statusColors[$project->status] ??
+                                                                    'bg-gray-100 text-gray-800 border-gray-200';
+                                                            @endphp
+                                                            <span
+                                                                class="project-status px-2 py-1 rounded text-xs font-semibold border {{ $statusClass }}">
+                                                                {{ ucfirst(str_replace('_', ' ', $project->status)) }}
+                                                            </span>
+                                                            @if ($project->status === 'error' && $project->error_message)
+                                                                <div class="mt-1 text-xs text-red-600"
+                                                                    title="{{ $project->error_message }}">
+                                                                    <i class="ri-error-warning-line"></i>
+                                                                    <span
+                                                                        class="truncate max-w-[150px] inline-block align-bottom">{{ Str::limit($project->error_message, 50) }}</span>
+                                                                </div>
+                                                            @endif
+                                                        </td>
+                                                        <td class="px-4 py-3 text-sm text-gray-600 align-top">
+                                                            {{ $project->created_at?->format('d/m/Y H:i') ?? '—' }}
+                                                        </td>
+                                                        <td class="px-4 py-3 text-right text-sm align-top">
+                                                            <div class="inline-flex flex-wrap gap-2 justify-end">
+                                                                @if ($project->status === 'error')
+                                                                    <button
+                                                                        class="retry-transcript-btn px-3 py-1.5 bg-orange-600 text-white rounded hover:bg-orange-700"
+                                                                        data-project-id="{{ $project->id }}"
+                                                                        data-youtube-url="{{ $project->youtube_url }}"
+                                                                        data-transcript-url="{{ route('projects.get.transcript.async', $project) }}">
+                                                                        <i class="ri-refresh-line"></i> Retry
+                                                                    </button>
+                                                                @endif
+                                                                <a href="{{ route('projects.edit', $project) }}"
+                                                                    class="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700">Edit</a>
+                                                                <span
+                                                                    class="row-spinner hidden items-center gap-2 text-xs text-gray-500">
+                                                                    <svg class="animate-spin h-4 w-4 text-green-600"
+                                                                        viewBox="0 0 24 24">
+                                                                        <circle class="opacity-25" cx="12"
+                                                                            cy="12" r="10" stroke="currentColor"
+                                                                            stroke-width="4" fill="none"></circle>
+                                                                        <path class="opacity-75" fill="currentColor"
+                                                                            d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                                                                    </svg>
+                                                                    Processing...
+                                                                </span>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    <div class="mt-6">
+                                        {{ $projects->links() }}
+                                    </div>
+                                @endif
+
+                                <!-- Reference Channels Section (Only for Dub channels) -->
+                                @if ($youtubeChannel->content_type === 'dub')
+                                    <div class="mt-8 pt-8 border-t border-gray-200">
+                                        <div class="flex items-center justify-between mb-4">
+                                            <div>
+                                                <h3 class="text-lg font-semibold">Reference Channels</h3>
+                                                <p class="text-xs text-gray-500 mt-1">Kênh YouTube gốc để lấy video và lồng
+                                                    tiếng</p>
+                                            </div>
+                                            <a href="{{ route('youtube-channels.edit', $youtubeChannel) }}"
+                                                class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg transition duration-200">
+                                                Manage
+                                            </a>
+                                        </div>
+
+                                        @if ($referenceChannels->count() === 0)
+                                            <div class="text-center py-8 bg-purple-50 rounded-lg border border-purple-100">
+                                                <div class="text-gray-600 mb-2">Chưa có reference channels.</div>
+                                                <p class="text-xs text-gray-500">Thêm kênh YouTube gốc để tự động lấy video
+                                                    cần lồng tiếng.</p>
+                                            </div>
+                                        @else
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                @foreach ($referenceChannels as $ref)
+                                                    <div
+                                                        class="flex items-center gap-4 p-4 border border-gray-200 rounded-lg hover:border-purple-300 transition">
+                                                        <div class="flex-shrink-0">
+                                                            @if ($ref->ref_thumbnail_url)
+                                                                <img src="{{ $ref->ref_thumbnail_url }}" alt="Thumbnail"
+                                                                    class="w-14 h-14 rounded-full object-cover border">
                                                             @else
                                                                 <div
-                                                                    class="w-12 h-8 rounded bg-gray-100 flex items-center justify-center text-gray-400 flex-shrink-0">
-                                                                    <i class="ri-image-line"></i>
+                                                                    class="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                                                                    <i class="ri-youtube-line"></i>
                                                                 </div>
                                                             @endif
-                                                            <div class="min-w-0">
-                                                                <div class="font-medium break-words">
-                                                                    {{ $project->youtube_title_vi ?? ($project->youtube_title ?? $project->video_id) }}
+                                                        </div>
+                                                        <div class="min-w-0 flex-1">
+                                                            <div class="text-sm font-semibold text-gray-900 truncate">
+                                                                {{ $ref->ref_title ?? 'Untitled Channel' }}
+                                                            </div>
+                                                            <div class="text-xs text-gray-500">
+                                                                {{ $ref->ref_channel_id ?? '—' }}
+                                                            </div>
+                                                            <div class="text-xs text-gray-400 truncate">
+                                                                {{ $ref->ref_channel_url }}
+                                                            </div>
+                                                            @if ($ref->ref_description)
+                                                                <div class="text-xs text-gray-600 mt-1 line-clamp-2">
+                                                                    {{ $ref->ref_description }}
                                                                 </div>
-                                                                @if ($project->youtube_url)
-                                                                    <a href="{{ $project->youtube_url }}" target="_blank"
-                                                                        class="text-xs text-red-600 hover:text-red-700 break-words">Open
-                                                                        video</a>
-                                                                @endif
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td class="px-4 py-3 text-sm text-gray-600 align-top">
-                                                        {{ $project->youtube_duration ?? '—' }}
-                                                    </td>
-                                                    <td class="px-4 py-3 text-sm text-gray-600 align-top">
-                                                        @php
-                                                            $statusColors = [
-                                                                'new' => 'bg-blue-100 text-blue-800 border-blue-200',
-                                                                'pending' =>
-                                                                    'bg-yellow-100 text-yellow-800 border-yellow-200',
-                                                                'processing' =>
-                                                                    'bg-purple-100 text-purple-800 border-purple-200',
-                                                                'transcribed' =>
-                                                                    'bg-cyan-100 text-cyan-800 border-cyan-200',
-                                                                'translated' =>
-                                                                    'bg-indigo-100 text-indigo-800 border-indigo-200',
-                                                                'tts_generated' =>
-                                                                    'bg-pink-100 text-pink-800 border-pink-200',
-                                                                'aligned' =>
-                                                                    'bg-teal-100 text-teal-800 border-teal-200',
-                                                                'merged' => 'bg-lime-100 text-lime-800 border-lime-200',
-                                                                'completed' =>
-                                                                    'bg-green-100 text-green-800 border-green-200',
-                                                                'error' => 'bg-red-100 text-red-800 border-red-200',
-                                                            ];
-                                                            $statusClass =
-                                                                $statusColors[$project->status] ??
-                                                                'bg-gray-100 text-gray-800 border-gray-200';
-                                                        @endphp
-                                                        <span
-                                                            class="project-status px-2 py-1 rounded text-xs font-semibold border {{ $statusClass }}">
-                                                            {{ ucfirst(str_replace('_', ' ', $project->status)) }}
-                                                        </span>
-                                                        @if ($project->status === 'error' && $project->error_message)
-                                                            <div class="mt-1 text-xs text-red-600"
-                                                                title="{{ $project->error_message }}">
-                                                                <i class="ri-error-warning-line"></i>
-                                                                <span
-                                                                    class="truncate max-w-[150px] inline-block align-bottom">{{ Str::limit($project->error_message, 50) }}</span>
-                                                            </div>
-                                                        @endif
-                                                    </td>
-                                                    <td class="px-4 py-3 text-sm text-gray-600 align-top">
-                                                        {{ $project->created_at?->format('d/m/Y H:i') ?? '—' }}
-                                                    </td>
-                                                    <td class="px-4 py-3 text-right text-sm align-top">
-                                                        <div class="inline-flex flex-wrap gap-2 justify-end">
-                                                            @if ($project->status === 'error')
-                                                                <button
-                                                                    class="retry-transcript-btn px-3 py-1.5 bg-orange-600 text-white rounded hover:bg-orange-700"
-                                                                    data-project-id="{{ $project->id }}"
-                                                                    data-youtube-url="{{ $project->youtube_url }}"
-                                                                    data-transcript-url="{{ route('projects.get.transcript.async', $project) }}">
-                                                                    <i class="ri-refresh-line"></i> Retry
-                                                                </button>
                                                             @endif
-                                                            <a href="{{ route('projects.edit', $project) }}"
-                                                                class="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700">Edit</a>
-                                                            <span
-                                                                class="row-spinner hidden items-center gap-2 text-xs text-gray-500">
-                                                                <svg class="animate-spin h-4 w-4 text-green-600"
-                                                                    viewBox="0 0 24 24">
-                                                                    <circle class="opacity-25" cx="12"
-                                                                        cy="12" r="10" stroke="currentColor"
-                                                                        stroke-width="4" fill="none"></circle>
-                                                                    <path class="opacity-75" fill="currentColor"
-                                                                        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-                                                                </svg>
-                                                                Processing...
-                                                            </span>
+                                                            <div class="text-xs text-gray-500 mt-1">
+                                                                Fetch every {{ $ref->fetch_interval_days ?? 7 }} day(s)
+                                                            </div>
                                                         </div>
-                                                    </td>
-                                                </tr>
-                                            @endforeach
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                <div class="mt-6">
-                                    {{ $projects->links() }}
-                                </div>
-                            @endif
-
-                            <!-- Reference Channels Section (Only for Dub channels) -->
-                            @if($youtubeChannel->content_type === 'dub')
-                                <div class="mt-8 pt-8 border-t border-gray-200">
-                                    <div class="flex items-center justify-between mb-4">
-                                        <div>
-                                            <h3 class="text-lg font-semibold">Reference Channels</h3>
-                                            <p class="text-xs text-gray-500 mt-1">Kênh YouTube gốc để lấy video và lồng tiếng</p>
-                                        </div>
-                                        <a href="{{ route('youtube-channels.edit', $youtubeChannel) }}"
-                                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg transition duration-200">
-                                            Manage
-                                        </a>
+                                                        <div class="flex-shrink-0">
+                                                            <a href="{{ $ref->ref_channel_url }}" target="_blank"
+                                                                class="text-xs text-red-600 hover:text-red-700">Open</a>
+                                                        </div>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        @endif
                                     </div>
-
-                                    @if ($referenceChannels->count() === 0)
-                                        <div class="text-center py-8 bg-purple-50 rounded-lg border border-purple-100">
-                                            <div class="text-gray-600 mb-2">Chưa có reference channels.</div>
-                                            <p class="text-xs text-gray-500">Thêm kênh YouTube gốc để tự động lấy video cần lồng tiếng.</p>
-                                        </div>
-                                    @else
-                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            @foreach ($referenceChannels as $ref)
-                                                <div class="flex items-center gap-4 p-4 border border-gray-200 rounded-lg hover:border-purple-300 transition">
-                                                    <div class="flex-shrink-0">
-                                                        @if ($ref->ref_thumbnail_url)
-                                                            <img src="{{ $ref->ref_thumbnail_url }}" alt="Thumbnail"
-                                                                class="w-14 h-14 rounded-full object-cover border">
-                                                        @else
-                                                            <div
-                                                                class="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
-                                                                <i class="ri-youtube-line"></i>
-                                                            </div>
-                                                        @endif
-                                                    </div>
-                                                    <div class="min-w-0 flex-1">
-                                                        <div class="text-sm font-semibold text-gray-900 truncate">
-                                                            {{ $ref->ref_title ?? 'Untitled Channel' }}
-                                                        </div>
-                                                        <div class="text-xs text-gray-500">{{ $ref->ref_channel_id ?? '—' }}
-                                                        </div>
-                                                        <div class="text-xs text-gray-400 truncate">
-                                                            {{ $ref->ref_channel_url }}
-                                                        </div>
-                                                        @if ($ref->ref_description)
-                                                            <div class="text-xs text-gray-600 mt-1 line-clamp-2">
-                                                                {{ $ref->ref_description }}
-                                                            </div>
-                                                        @endif
-                                                        <div class="text-xs text-gray-500 mt-1">
-                                                            Fetch every {{ $ref->fetch_interval_days ?? 7 }} day(s)
-                                                        </div>
-                                                    </div>
-                                                    <div class="flex-shrink-0">
-                                                        <a href="{{ $ref->ref_channel_url }}" target="_blank"
-                                                            class="text-xs text-red-600 hover:text-red-700">Open</a>
-                                                    </div>
-                                                </div>
-                                            @endforeach
-                                        </div>
-                                    @endif
-                                </div>
-                            @endif
-                        </div>
+                                @endif
+                            </div>
                         @endif
 
-                        @if($youtubeChannel->content_type === 'audiobook')
-                        <div id="tabAudiobooks" class="tab-content">
-                            <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-lg font-semibold">Audio books</h3>
-                                <a href="{{ route('audiobooks.create') }}?youtube_channel_id={{ $youtubeChannel->id }}"
-                                    class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
-                                    + New Audio book
-                                </a>
-                            </div>
-
-                            @if ($audioBooks->count() === 0)
-                                <div class="text-center py-8 text-gray-600">No audio books yet.</div>
-                            @else
-                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    @foreach ($audioBooks as $audioBook)
+                        @if ($youtubeChannel->content_type === 'audiobook')
+                            <div id="tabAudiobooks" class="tab-content">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-lg font-semibold">Audio books</h3>
+                                    <div class="flex items-center gap-2">
                                         <div
-                                            class="border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition duration-200 flex flex-col">
-                                            <div class="relative bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center p-4"
-                                                style="min-height: 200px;">
-                                                @if ($audioBook->cover_image)
-                                                    <img src="{{ asset('storage/' . $audioBook->cover_image) }}"
-                                                        alt="Cover"
-                                                        class="max-h-48 w-auto object-contain rounded shadow-md">
-                                                @else
-                                                    <div
-                                                        class="w-32 h-44 bg-gradient-to-br from-blue-400 to-blue-600 rounded-lg flex items-center justify-center text-white shadow-md">
-                                                        <i class="ri-book-line text-4xl"></i>
+                                            class="flex items-center gap-1 rounded-lg border border-gray-200 bg-white p-1">
+                                            <button type="button" id="audioBooksGridBtn"
+                                                class="px-3 py-1.5 text-xs font-medium rounded-md bg-gray-900 text-white">
+                                                Grid
+                                            </button>
+                                            <button type="button" id="audioBooksListBtn"
+                                                class="px-3 py-1.5 text-xs font-medium rounded-md text-gray-600 hover:text-gray-900">
+                                                List
+                                            </button>
+                                        </div>
+                                        <a href="{{ route('audiobooks.create') }}?youtube_channel_id={{ $youtubeChannel->id }}"
+                                            class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
+                                            + New Audio book
+                                        </a>
+                                    </div>
+                                </div>
+
+                                <div class="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                    @php
+                                        $audioBooksClearUrl = route('youtube-channels.show', $youtubeChannel);
+                                        $audioBooksKeep = request()->except(['ab_search', 'ab_status', 'page']);
+                                        if (!empty($audioBooksKeep)) {
+                                            $audioBooksClearUrl .= '?' . http_build_query($audioBooksKeep);
+                                        }
+                                    @endphp
+                                    <form method="GET" action="{{ route('youtube-channels.show', $youtubeChannel) }}"
+                                        class="flex gap-4 items-end flex-wrap">
+                                        <div class="flex-1 min-w-64">
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Tìm sách</label>
+                                            <input type="text" name="ab_search"
+                                                placeholder="Tên sách, tác giả, thể loại..." value="{{ $abSearch }}"
+                                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        </div>
+                                        <div class="flex-1 min-w-48">
+                                            <label class="block text-sm font-medium text-gray-700 mb-1">Trạng thái</label>
+                                            <select name="ab_status"
+                                                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                                <option value="">Tất cả</option>
+                                                <option value="not_started"
+                                                    @if ($abStatus === 'not_started') selected @endif>Chưa bắt đầu
+                                                </option>
+                                                <option value="processing"
+                                                    @if ($abStatus === 'processing') selected @endif>Đang xử lý</option>
+                                                <option value="completed"
+                                                    @if ($abStatus === 'completed') selected @endif>Hoàn tất</option>
+                                                <option value="error" @if ($abStatus === 'error') selected @endif>
+                                                    Lỗi</option>
+                                            </select>
+                                        </div>
+                                        @foreach (request()->except(['ab_search', 'ab_status', 'page']) as $key => $value)
+                                            @if (!is_array($value))
+                                                <input type="hidden" name="{{ $key }}"
+                                                    value="{{ $value }}">
+                                            @endif
+                                        @endforeach
+                                        <div class="flex gap-2">
+                                            <button type="submit"
+                                                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">
+                                                Lọc
+                                            </button>
+                                            <a href="{{ $audioBooksClearUrl }}"
+                                                class="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg text-sm font-medium">
+                                                Xóa lọc
+                                            </a>
+                                        </div>
+                                    </form>
+                                </div>
+
+                                @if ($audioBooks->count() === 0)
+                                    <div class="text-center py-8 text-gray-600">No audio books yet.</div>
+                                @else
+                                    <div id="audioBooksGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        @foreach ($audioBooks as $audioBook)
+                                            @php
+                                                $chaptersTotal =
+                                                    $audioBook->chapters_total ?? ($audioBook->total_chapters ?? 0);
+                                                $chaptersWithVideo = $audioBook->chapters_with_video ?? 0;
+                                                $chaptersWithAudio = $audioBook->chapters_with_audio ?? 0;
+                                                $chaptersWithError = $audioBook->chapters_with_error ?? 0;
+                                                $durationSeconds = (int) round($audioBook->total_duration_seconds ?? 0);
+                                                $hours = (int) floor($durationSeconds / 3600);
+                                                $mins = (int) floor(($durationSeconds % 3600) / 60);
+                                                $secs = (int) ($durationSeconds % 60);
+                                                $durationLabel =
+                                                    $durationSeconds > 0
+                                                        ? ($hours > 0
+                                                            ? sprintf('%dh %02dm %02ds', $hours, $mins, $secs)
+                                                            : sprintf('%dm %02ds', $mins, $secs))
+                                                        : '—';
+                                                if ($chaptersWithError > 0) {
+                                                    $statusLabel = 'Lỗi';
+                                                    $statusClass = 'bg-red-100 text-red-700';
+                                                } elseif ($chaptersTotal > 0 && $chaptersWithVideo >= $chaptersTotal) {
+                                                    $statusLabel = 'Hoàn tất';
+                                                    $statusClass = 'bg-green-100 text-green-700';
+                                                } elseif ($chaptersWithAudio > 0) {
+                                                    $statusLabel = 'Đang xử lý';
+                                                    $statusClass = 'bg-amber-100 text-amber-700';
+                                                } else {
+                                                    $statusLabel = 'Chưa bắt đầu';
+                                                    $statusClass = 'bg-gray-100 text-gray-600';
+                                                }
+                                            @endphp
+                                            <div
+                                                class="border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition duration-200 flex flex-col">
+                                                <div class="relative bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center p-4"
+                                                    style="min-height: 200px;">
+                                                    @if ($audioBook->cover_image)
+                                                        <img src="{{ asset('storage/' . $audioBook->cover_image) }}"
+                                                            alt="Cover"
+                                                            class="max-h-48 w-auto object-contain rounded shadow-md">
+                                                    @else
+                                                        <div
+                                                            class="w-32 h-44 bg-gradient-to-br from-blue-400 to-blue-600 rounded-lg flex items-center justify-center text-white shadow-md">
+                                                            <i class="ri-book-line text-4xl"></i>
+                                                        </div>
+                                                    @endif
+                                                </div>
+                                                <div class="p-4 flex-1 flex flex-col">
+                                                    <h4 class="text-sm font-semibold text-gray-900 truncate">
+                                                        {{ $audioBook->title }}
+                                                    </h4>
+                                                    <div class="flex flex-wrap items-center gap-2 mt-2">
+                                                        <span class="text-xs text-gray-500">{{ $chaptersTotal }}
+                                                            chương</span>
+                                                        <span class="text-xs text-gray-500">⏱️ {{ $durationLabel }}</span>
+                                                        <span
+                                                            class="text-xs px-2 py-0.5 rounded-full {{ $statusClass }}">{{ $statusLabel }}</span>
                                                     </div>
-                                                @endif
+                                                    @if ($audioBook->description)
+                                                        <p class="text-xs text-gray-600 mt-2 line-clamp-2 flex-1">
+                                                            {{ $audioBook->description }}
+                                                        </p>
+                                                    @endif
+                                                    <div class="flex gap-2 mt-4">
+                                                        <a href="{{ route('audiobooks.show', $audioBook) }}"
+                                                            class="flex-1 text-center px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700">
+                                                            View
+                                                        </a>
+                                                        <a href="{{ route('audiobooks.edit', $audioBook) }}"
+                                                            class="flex-1 text-center px-3 py-1.5 bg-gray-200 text-gray-800 rounded text-xs font-medium hover:bg-gray-300">
+                                                            Edit
+                                                        </a>
+                                                        <form action="{{ route('audiobooks.destroy', $audioBook) }}"
+                                                            method="POST" class="flex-1">
+                                                            @csrf
+                                                            @method('DELETE')
+                                                            <button type="submit"
+                                                                class="w-full px-3 py-1.5 bg-red-100 text-red-700 rounded text-xs font-medium hover:bg-red-200"
+                                                                onclick="return confirm('Xóa audiobook này?');">
+                                                                Xóa
+                                                            </button>
+                                                        </form>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div class="p-4 flex-1 flex flex-col">
-                                                <h4 class="text-sm font-semibold text-gray-900 truncate">
-                                                    {{ $audioBook->title }}
-                                                </h4>
-                                                <p class="text-xs text-gray-500 mt-1">
-                                                    {{ $audioBook->total_chapters ?? 0 }} chapters
-                                                </p>
-                                                @if ($audioBook->description)
-                                                    <p class="text-xs text-gray-600 mt-2 line-clamp-2 flex-1">
-                                                        {{ $audioBook->description }}
-                                                    </p>
-                                                @endif
-                                                <div class="flex gap-2 mt-4">
+                                        @endforeach
+                                    </div>
+
+                                    <div id="audioBooksList"
+                                        class="hidden divide-y divide-gray-200 border border-gray-200 rounded-lg overflow-hidden">
+                                        @foreach ($audioBooks as $audioBook)
+                                            @php
+                                                $chaptersTotal =
+                                                    $audioBook->chapters_total ?? ($audioBook->total_chapters ?? 0);
+                                                $chaptersWithVideo = $audioBook->chapters_with_video ?? 0;
+                                                $chaptersWithAudio = $audioBook->chapters_with_audio ?? 0;
+                                                $chaptersWithError = $audioBook->chapters_with_error ?? 0;
+                                                $durationSeconds = (int) round($audioBook->total_duration_seconds ?? 0);
+                                                $hours = (int) floor($durationSeconds / 3600);
+                                                $mins = (int) floor(($durationSeconds % 3600) / 60);
+                                                $secs = (int) ($durationSeconds % 60);
+                                                $durationLabel =
+                                                    $durationSeconds > 0
+                                                        ? ($hours > 0
+                                                            ? sprintf('%dh %02dm %02ds', $hours, $mins, $secs)
+                                                            : sprintf('%dm %02ds', $mins, $secs))
+                                                        : '—';
+                                                if ($chaptersWithError > 0) {
+                                                    $statusLabel = 'Lỗi';
+                                                    $statusClass = 'bg-red-100 text-red-700';
+                                                } elseif ($chaptersTotal > 0 && $chaptersWithVideo >= $chaptersTotal) {
+                                                    $statusLabel = 'Hoàn tất';
+                                                    $statusClass = 'bg-green-100 text-green-700';
+                                                } elseif ($chaptersWithAudio > 0) {
+                                                    $statusLabel = 'Đang xử lý';
+                                                    $statusClass = 'bg-amber-100 text-amber-700';
+                                                } else {
+                                                    $statusLabel = 'Chưa bắt đầu';
+                                                    $statusClass = 'bg-gray-100 text-gray-600';
+                                                }
+                                            @endphp
+                                            <div
+                                                class="flex flex-col md:flex-row md:items-center gap-4 p-4 hover:bg-gray-50">
+                                                <div class="flex items-center gap-4 flex-1">
+                                                    <div
+                                                        class="w-20 h-28 bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center shadow-sm border border-gray-200">
+                                                        @if ($audioBook->cover_image)
+                                                            <img src="{{ asset('storage/' . $audioBook->cover_image) }}"
+                                                                alt="Cover" class="w-full h-full object-cover">
+                                                        @else
+                                                            <div
+                                                                class="w-14 h-20 bg-gradient-to-br from-blue-400 to-blue-600 rounded-md flex items-center justify-center text-white">
+                                                                <i class="ri-book-line"></i>
+                                                            </div>
+                                                        @endif
+                                                    </div>
+                                                    <div class="min-w-0">
+                                                        <div class="flex items-center gap-2">
+                                                            <h4 class="text-sm font-semibold text-gray-900 truncate">
+                                                                {{ $audioBook->title }}
+                                                            </h4>
+                                                            <span
+                                                                class="text-xs px-2 py-0.5 rounded-full {{ $statusClass }}">{{ $statusLabel }}</span>
+                                                        </div>
+                                                        <div
+                                                            class="flex flex-wrap items-center gap-3 mt-1 text-xs text-gray-500">
+                                                            <span>{{ $chaptersTotal }} chương</span>
+                                                            <span>⏱️ {{ $durationLabel }}</span>
+                                                        </div>
+                                                        @if ($audioBook->description)
+                                                            <p class="text-xs text-gray-600 mt-2 line-clamp-2">
+                                                                {{ $audioBook->description }}
+                                                            </p>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                                <div class="flex items-center gap-2">
                                                     <a href="{{ route('audiobooks.show', $audioBook) }}"
-                                                        class="flex-1 text-center px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700">
+                                                        class="px-3 py-1.5 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700">
                                                         View
                                                     </a>
                                                     <a href="{{ route('audiobooks.edit', $audioBook) }}"
-                                                        class="flex-1 text-center px-3 py-1.5 bg-gray-200 text-gray-800 rounded text-xs font-medium hover:bg-gray-300">
+                                                        class="px-3 py-1.5 bg-gray-200 text-gray-800 rounded text-xs font-medium hover:bg-gray-300">
                                                         Edit
                                                     </a>
+                                                    <form action="{{ route('audiobooks.destroy', $audioBook) }}"
+                                                        method="POST">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button type="submit"
+                                                            class="px-3 py-1.5 bg-red-100 text-red-700 rounded text-xs font-medium hover:bg-red-200"
+                                                            onclick="return confirm('Xóa audiobook này?');">
+                                                            Xóa
+                                                        </button>
+                                                    </form>
                                                 </div>
                                             </div>
-                                        </div>
-                                    @endforeach
-                                </div>
+                                        @endforeach
+                                    </div>
 
-                                <div class="mt-6">
-                                    {{ $audioBooks->links() }}
-                                </div>
-                            @endif
-                        </div>
+                                    <div class="mt-6">
+                                        {{ $audioBooks->appends(request()->query())->links() }}
+                                    </div>
+                                @endif
+                            </div>
                         @endif
 
-                        @if($youtubeChannel->content_type === 'self_creative')
-                        <!-- Self Creative Tab -->
-                        <div id="tabSelfCreative" class="tab-content">
-                            <div class="flex items-center justify-between mb-4">
-                                <h3 class="text-lg font-semibold">✨ Nội dung sáng tạo</h3>
-                                <a href="{{ route('youtube-channels.contents.create', $youtubeChannel) }}"
-                                    class="bg-orange-600 hover:bg-orange-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
-                                    + Tạo nội dung mới
-                                </a>
-                            </div>
+                        @if ($youtubeChannel->content_type === 'self_creative')
+                            <!-- Self Creative Tab -->
+                            <div id="tabSelfCreative" class="tab-content">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-lg font-semibold">✨ Nội dung sáng tạo</h3>
+                                    <a href="{{ route('youtube-channels.contents.create', $youtubeChannel) }}"
+                                        class="bg-orange-600 hover:bg-orange-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
+                                        + Tạo nội dung mới
+                                    </a>
+                                </div>
 
-                            <div class="text-center py-8 text-gray-600">
-                                <div class="text-4xl mb-4">✨</div>
-                                <p class="text-lg mb-2">Kênh Self Creative</p>
-                                <p class="text-sm text-gray-500">Tạo nội dung từ kịch bản của riêng bạn</p>
+                                <div class="text-center py-8 text-gray-600">
+                                    <div class="text-4xl mb-4">✨</div>
+                                    <p class="text-lg mb-2">Kênh Self Creative</p>
+                                    <p class="text-sm text-gray-500">Tạo nội dung từ kịch bản của riêng bạn</p>
+                                </div>
                             </div>
-                        </div>
                         @endif
                     </div>
                 </div>
@@ -664,6 +894,34 @@
                     setActiveTab('audiobooks');
                 } else if (contentType === 'self_creative' && tabSelfCreativeBtn) {
                     setActiveTab('selfCreative');
+                }
+
+                const audioBooksGridBtn = document.getElementById('audioBooksGridBtn');
+                const audioBooksListBtn = document.getElementById('audioBooksListBtn');
+                const audioBooksGrid = document.getElementById('audioBooksGrid');
+                const audioBooksList = document.getElementById('audioBooksList');
+
+                const setAudioBooksView = (mode) => {
+                    if (!audioBooksGrid || !audioBooksList || !audioBooksGridBtn || !audioBooksListBtn) return;
+                    const isList = mode === 'list';
+                    audioBooksGrid.classList.toggle('hidden', isList);
+                    audioBooksList.classList.toggle('hidden', !isList);
+
+                    audioBooksGridBtn.classList.toggle('bg-gray-900', !isList);
+                    audioBooksGridBtn.classList.toggle('text-white', !isList);
+                    audioBooksGridBtn.classList.toggle('text-gray-600', isList);
+                    audioBooksListBtn.classList.toggle('bg-gray-900', isList);
+                    audioBooksListBtn.classList.toggle('text-white', isList);
+                    audioBooksListBtn.classList.toggle('text-gray-600', !isList);
+
+                    localStorage.setItem('audiobookViewMode', mode);
+                };
+
+                if (audioBooksGridBtn && audioBooksListBtn) {
+                    audioBooksGridBtn.addEventListener('click', () => setAudioBooksView('grid'));
+                    audioBooksListBtn.addEventListener('click', () => setAudioBooksView('list'));
+                    const savedMode = localStorage.getItem('audiobookViewMode') || 'grid';
+                    setAudioBooksView(savedMode);
                 }
 
                 openBtns.forEach((btn) => {
@@ -918,6 +1176,5 @@
                     });
                 });
             });
-
         </script>
     @endsection

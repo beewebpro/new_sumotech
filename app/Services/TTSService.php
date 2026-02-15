@@ -290,8 +290,8 @@ class TTSService
                 // Use local edge-tts (no API key needed)
                 return $this->generateWithEdgeTTS($finalText, $index, $voiceGender, $voiceName, $projectId, $speed);
             } elseif ($provider === 'vbee') {
-                $vbeeAppId = env('VBEE_TTS_APP_ID');
-                $vbeeToken = env('VBEE_TTS_TOKEN');
+                $vbeeAppId = config('services.vbee.app_id') ?? env('VBEE_TTS_APP_ID');
+                $vbeeToken = config('services.vbee.token') ?? env('VBEE_TTS_TOKEN');
 
                 if (!$vbeeAppId || !$vbeeToken) {
                     throw new Exception('Missing VBEE_TTS_APP_ID or VBEE_TTS_TOKEN. Please set both in .env');

@@ -5,10 +5,16 @@
         <div class="max-w-2xl mx-auto sm:px-6 lg:px-8">
             <div class="flex justify-between items-center mb-6">
                 <h2 class="font-semibold text-2xl text-gray-800">📚 Tạo Sách Mới</h2>
-                <a href="{{ route('youtube-channels.index') }}"
-                    class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
-                    Quay lại
-                </a>
+                <div class="flex items-center gap-2">
+                    <button type="button" id="openBulkModal"
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
+                        Tạo nhiều sách
+                    </button>
+                    <a href="{{ route('youtube-channels.index') }}"
+                        class="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
+                        Quay lại
+                    </a>
+                </div>
             </div>
 
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
@@ -23,7 +29,8 @@
 
                         <!-- URL Auto-Fill Section -->
                         <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                            <label class="block text-sm font-medium text-blue-900 mb-2">🔗 Tự động điền thông tin từ URL</label>
+                            <label class="block text-sm font-medium text-blue-900 mb-2">🔗 Tự động điền thông tin từ
+                                URL</label>
                             <div class="flex gap-2">
                                 <input type="url" id="bookUrl"
                                     class="flex-1 px-3 py-2 border border-blue-300 rounded-lg text-sm"
@@ -41,7 +48,8 @@
                             <!-- Cover Image Preview -->
                             <div id="coverImagePreview" class="mt-3 hidden">
                                 <p class="text-xs font-medium text-blue-900 mb-2">📷 Ảnh bìa từ URL:</p>
-                                <img id="coverImagePreviewImg" src="" alt="Cover" class="w-32 h-auto rounded-lg border-2 border-blue-300">
+                                <img id="coverImagePreviewImg" src="" alt="Cover"
+                                    class="w-32 h-auto rounded-lg border-2 border-blue-300">
                             </div>
                         </div>
 
@@ -237,6 +245,34 @@
             </div>
         </div>
     </div>
+
+    <div id="bulkModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/40" data-bulk-close></div>
+        <div class="relative max-w-2xl mx-auto mt-24 bg-white rounded-xl shadow-lg p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-800">Tạo nhiều sách từ URL</h3>
+                <button type="button" class="text-gray-500 hover:text-gray-700" data-bulk-close>✕</button>
+            </div>
+            <p class="text-sm text-gray-600 mb-3">
+                Dán danh sách URL (mỗi dòng một URL). Sẽ dùng channel và ngôn ngữ đang chọn ở form.
+            </p>
+            <textarea id="bulkUrls" rows="8" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                placeholder="https://docsach24.co/e-book/dao-giau-vang-118.html
+https://nhasachmienphi.com/doc-online/..."></textarea>
+            <div id="bulkStatus" class="mt-3 text-sm"></div>
+            <div class="mt-4 flex gap-2">
+                <button type="button" id="bulkSubmit"
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
+                    Bắt đầu tạo
+                </button>
+                <button type="button"
+                    class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg" data-bulk-close>
+                    Hủy
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         (function() {
             const bookTypeSelect = document.getElementById('bookTypeSelect');
@@ -266,7 +302,8 @@
             const bookUrlInput = document.getElementById('bookUrl');
             const fetchMetadataBtn = document.getElementById('fetchMetadataBtn');
             const fetchStatus = document.getElementById('fetchStatus');
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}';
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+                '{{ csrf_token() }}';
 
             if (fetchMetadataBtn && bookUrlInput) {
                 fetchMetadataBtn.addEventListener('click', async function() {
@@ -290,7 +327,9 @@
                                 'X-CSRF-TOKEN': csrfToken,
                                 'Accept': 'application/json'
                             },
-                            body: JSON.stringify({ book_url: bookUrl })
+                            body: JSON.stringify({
+                                book_url: bookUrl
+                            })
                         });
 
                         const data = await response.json();
@@ -308,7 +347,8 @@
                                 console.log('Filled author:', data.author);
                             }
                             if (data.description) {
-                                document.querySelector('textarea[name="description"]').value = data.description;
+                                document.querySelector('textarea[name="description"]').value = data
+                                    .description;
                                 console.log('Filled description');
                             }
 
@@ -334,7 +374,8 @@
                             // Handle cover image
                             if (data.cover_image) {
                                 const coverImagePreview = document.getElementById('coverImagePreview');
-                                const coverImagePreviewImg = document.getElementById('coverImagePreviewImg');
+                                const coverImagePreviewImg = document.getElementById(
+                                'coverImagePreviewImg');
                                 const coverImageUrlHidden = document.getElementById('coverImageUrlHidden');
 
                                 coverImagePreviewImg.src = data.cover_image;
@@ -387,6 +428,122 @@
                 };
                 fetchStatus.className = `mt-3 p-3 text-sm rounded-lg ${colors[type] || 'text-gray-700'}`;
                 fetchStatus.innerHTML = message;
+            }
+
+            const bulkModal = document.getElementById('bulkModal');
+            const openBulkModalBtn = document.getElementById('openBulkModal');
+            const bulkSubmitBtn = document.getElementById('bulkSubmit');
+            const bulkUrlsInput = document.getElementById('bulkUrls');
+            const bulkStatus = document.getElementById('bulkStatus');
+
+            function setBulkStatus(type, message) {
+                const colors = {
+                    loading: 'text-blue-700 bg-blue-50 border border-blue-200',
+                    success: 'text-green-700 bg-green-50 border border-green-200',
+                    error: 'text-red-700 bg-red-50 border border-red-200'
+                };
+                bulkStatus.className = `mt-3 p-3 text-sm rounded-lg ${colors[type] || 'text-gray-700'}`;
+                bulkStatus.innerHTML = message;
+            }
+
+            function openBulkModal() {
+                bulkModal.classList.remove('hidden');
+            }
+
+            function closeBulkModal() {
+                bulkModal.classList.add('hidden');
+            }
+
+            if (openBulkModalBtn) {
+                openBulkModalBtn.addEventListener('click', openBulkModal);
+            }
+
+            document.querySelectorAll('[data-bulk-close]').forEach((el) => {
+                el.addEventListener('click', closeBulkModal);
+            });
+
+            if (bulkSubmitBtn && bulkUrlsInput) {
+                bulkSubmitBtn.addEventListener('click', async function() {
+                    const raw = bulkUrlsInput.value || '';
+                    const urls = raw
+                        .split('\n')
+                        .map((line) => line.trim())
+                        .filter((line) => line.length > 0);
+
+                    const channelId = document.querySelector('select[name="youtube_channel_id"]')?.value ||
+                        '';
+                    const language = document.querySelector('select[name="language"]')?.value || '';
+
+                    if (!channelId) {
+                        setBulkStatus('error', 'Vui lòng chọn channel trước khi tạo nhiều sách.');
+                        return;
+                    }
+
+                    if (!language) {
+                        setBulkStatus('error', 'Vui lòng chọn ngôn ngữ trước khi tạo nhiều sách.');
+                        return;
+                    }
+
+                    if (urls.length === 0) {
+                        setBulkStatus('error', 'Vui lòng nhập ít nhất 1 URL.');
+                        return;
+                    }
+
+                    bulkSubmitBtn.disabled = true;
+                    bulkSubmitBtn.textContent = 'Đang xử lý...';
+                    setBulkStatus('loading', 'Đang tạo sách, vui lòng chờ...');
+
+                    try {
+                        const response = await fetch('{{ route('audiobooks.bulk.create') }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': csrfToken,
+                                'Accept': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                youtube_channel_id: channelId,
+                                language,
+                                book_urls: urls
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (!response.ok || !data.success) {
+                            setBulkStatus('error', data.error || 'Có lỗi xảy ra khi tạo sách.');
+                            return;
+                        }
+
+                        const createdItems = (data.created || []).map((item) => {
+                            const bookUrl = `{{ url('/audiobooks') }}/${item.id}`;
+                            return `• <a class="text-blue-600 hover:text-blue-800" href="${bookUrl}">${item.title}</a> (${item.chapters || 0} chương)`;
+                        });
+
+                        const errorItems = (data.errors || []).map((item) => {
+                            return `• ${item.url}: ${item.error}`;
+                        });
+
+                        const parts = [];
+                        parts.push(`<div>Đã xử lý ${data.total || urls.length} URL.</div>`);
+                        if (createdItems.length) {
+                            parts.push('<div class="mt-2 font-medium">Đã tạo:</div>');
+                            parts.push(`<div class="text-sm">${createdItems.join('<br>')}</div>`);
+                        }
+                        if (errorItems.length) {
+                            parts.push('<div class="mt-2 font-medium text-red-700">Lỗi:</div>');
+                            parts.push(
+                            `<div class="text-sm text-red-700">${errorItems.join('<br>')}</div>`);
+                        }
+
+                        setBulkStatus('success', parts.join(''));
+                    } catch (error) {
+                        setBulkStatus('error', 'Lỗi kết nối. Vui lòng thử lại.');
+                    } finally {
+                        bulkSubmitBtn.disabled = false;
+                        bulkSubmitBtn.textContent = 'Bắt đầu tạo';
+                    }
+                });
             }
         })();
     </script>

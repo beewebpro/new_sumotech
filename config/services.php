@@ -46,4 +46,9 @@ return [
         'api_key' => env('GEMINI_API_KEY'),
     ],
 
+    'vbee' => [
+        'app_id' => env('VBEE_TTS_APP_ID'),
+        'token' => env('VBEE_TTS_TOKEN'),
+    ],
+
 ];

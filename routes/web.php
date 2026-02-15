@@ -143,6 +143,18 @@ Route::middleware('auth')->prefix('audiobooks')->name('audiobooks.')->group(func
     Route::delete('{audioBook}/delete-description-audio', [AudioBookController::class, 'deleteDescriptionAudio'])->name('delete.description.audio');
     Route::delete('{audioBook}/delete-description-video', [AudioBookController::class, 'deleteDescriptionVideo'])->name('delete.description.video');
 
+    // Full Book Video (merge all chapters + description into one video)
+    Route::post('{audioBook}/generate-fullbook-video-async', [AudioBookController::class, 'startFullBookVideoJob'])->name('generate.fullbook.video.async');
+    Route::get('{audioBook}/fullbook-video-progress', [AudioBookController::class, 'getFullBookVideoProgress'])->name('fullbook.video.progress');
+    Route::delete('{audioBook}/delete-fullbook-video', [AudioBookController::class, 'deleteFullBookVideo'])->name('delete.fullbook.video');
+
+    // Video Segments (batch: gom chương tùy chọn → nhiều video)
+    Route::get('{audioBook}/video-segments', [AudioBookController::class, 'getVideoSegments'])->name('video.segments.index');
+    Route::post('{audioBook}/video-segments', [AudioBookController::class, 'saveVideoSegments'])->name('video.segments.save');
+    Route::post('{audioBook}/video-segments/start', [AudioBookController::class, 'startBatchVideoGeneration'])->name('video.segments.start');
+    Route::get('{audioBook}/video-segments/progress', [AudioBookController::class, 'getBatchVideoProgress'])->name('video.segments.progress');
+    Route::delete('{audioBook}/video-segments/{segment}', [AudioBookController::class, 'deleteVideoSegment'])->name('video.segments.delete');
+
     // YouTube Media Generation Routes (AI Image/Video)
     Route::get('{audioBook}/media', [AudioBookController::class, 'getMedia'])->name('media.index');
     Route::post('{audioBook}/media/generate-thumbnail', [AudioBookController::class, 'generateThumbnail'])->name('media.generate.thumbnail');
@@ -183,6 +195,8 @@ Route::middleware('auth')->prefix('audiobooks')->name('audiobooks.')->group(func
     Route::delete('{audioBook}/chapters/{chapter}', [AudioBookChapterController::class, 'destroy'])->name('chapters.destroy');
     Route::post('{audioBook}/chapters/{chapter}/generate-tts', [AudioBookChapterController::class, 'generateTts'])->name('chapters.generate-tts');
     Route::post('{audioBook}/chapters/{chapter}/generate-tts-chunks', [AudioBookChapterController::class, 'generateTtsChunks'])->name('chapters.generate-tts-chunks');
+    Route::post('{audioBook}/chapters/tts/start', [AudioBookChapterController::class, 'startTtsBatch'])->name('chapters.tts.start');
+    Route::get('{audioBook}/chapters/tts/progress', [AudioBookChapterController::class, 'getTtsBatchProgress'])->name('chapters.tts.progress');
 
     // New chunk-by-chunk TTS generation endpoints
     Route::post('{audioBook}/chapters/{chapter}/initialize-chunks', [AudioBookChapterController::class, 'initializeChunks'])->name('chapters.initialize-chunks');
@@ -197,14 +211,21 @@ Route::middleware('auth')->prefix('audiobooks')->name('audiobooks.')->group(func
     // Fetch book metadata from URL (for create page auto-fill)
     Route::post('fetch-book-metadata', [AudioBookController::class, 'fetchBookMetadata'])->name('fetch.book.metadata');
 
+    // Bulk create audiobooks from multiple URLs
+    Route::post('bulk-create', [AudioBookController::class, 'bulkCreate'])->name('bulk.create');
+
     // Auto Publish to YouTube Routes
     Route::get('{audioBook}/publish/data', [AudioBookController::class, 'getPublishData'])->name('publish.data');
     Route::get('{audioBook}/publish/playlists', [AudioBookController::class, 'getYoutubePlaylists'])->name('publish.playlists');
     Route::post('{audioBook}/publish/generate-meta', [AudioBookController::class, 'generateVideoMeta'])->name('publish.generate.meta');
     Route::post('{audioBook}/publish/generate-playlist-meta', [AudioBookController::class, 'generatePlaylistMeta'])->name('publish.generate.playlist.meta');
     Route::post('{audioBook}/publish/upload', [AudioBookController::class, 'uploadToYoutube'])->name('publish.upload');
+    Route::post('{audioBook}/publish/upload-async', [AudioBookController::class, 'uploadToYoutubeAsync'])->name('publish.upload.async');
     Route::post('{audioBook}/publish/create-playlist', [AudioBookController::class, 'createPlaylistAndUpload'])->name('publish.create.playlist');
+    Route::post('{audioBook}/publish/create-playlist-async', [AudioBookController::class, 'createPlaylistAndUploadAsync'])->name('publish.create.playlist.async');
     Route::post('{audioBook}/publish/add-to-playlist', [AudioBookController::class, 'addToExistingPlaylist'])->name('publish.add.to.playlist');
+    Route::post('{audioBook}/publish/add-to-playlist-async', [AudioBookController::class, 'addToExistingPlaylistAsync'])->name('publish.add.to.playlist.async');
+    Route::get('{audioBook}/publish/progress', [AudioBookController::class, 'getPublishProgress'])->name('publish.progress');
     Route::post('{audioBook}/publish/save-meta', [AudioBookController::class, 'savePublishMeta'])->name('publish.save.meta');
     Route::get('{audioBook}/publish/history', [AudioBookController::class, 'getPublishHistory'])->name('publish.history');
 });

@@ -6,9 +6,11 @@ use App\Models\AudioBook;
 use App\Models\AudioBookChapter;
 use App\Models\AudioBookChapterChunk;
 use App\Services\TTSService;
+use App\Jobs\GenerateChapterTtsBatchJob;
 use Illuminate\Http\Request;
 use Symfony\Component\Process\Process;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class AudioBookChapterController extends Controller
 {
@@ -214,6 +216,79 @@ class AudioBookChapterController extends Controller
         $chapter->save();
 
         return back()->with('success', 'Quá trình tạo TTS đã hoàn tất');
+    }
+
+    /**
+     * Queue TTS generation for selected chapters (async).
+     */
+    public function startTtsBatch(Request $request, AudioBook $audioBook)
+    {
+        $request->validate([
+            'chapter_ids' => 'required|array|min:1',
+            'chapter_ids.*' => 'integer',
+            'provider' => 'required|string|in:openai,gemini,microsoft,vbee',
+            'voice_name' => 'required|string',
+            'voice_gender' => 'nullable|string|in:male,female',
+            'style_instruction' => 'nullable|string',
+            'tts_speed' => 'nullable|numeric|between:0.5,2.0',
+            'pause_between_chunks' => 'nullable|numeric|between:0,5'
+        ]);
+
+        $this->initTtsBatchProgress($audioBook->id, 'queued', 'Da dua vao hang doi, co the tat trinh duyet.');
+
+        GenerateChapterTtsBatchJob::dispatch(
+            $audioBook->id,
+            $request->input('chapter_ids'),
+            $request->only([
+                'provider',
+                'voice_name',
+                'voice_gender',
+                'style_instruction',
+                'tts_speed',
+                'pause_between_chunks'
+            ])
+        );
+
+        return response()->json([
+            'success' => true,
+            'queued' => true,
+            'message' => 'Da dua vao hang doi xu ly.'
+        ]);
+    }
+
+    /**
+     * Get background TTS progress for an audiobook.
+     */
+    public function getTtsBatchProgress(AudioBook $audioBook)
+    {
+        $progress = Cache::get("tts_batch_progress_{$audioBook->id}");
+        if (!$progress) {
+            return response()->json([
+                'success' => true,
+                'status' => 'idle'
+            ]);
+        }
+
+        $progress['logs'] = Cache::get("tts_batch_logs_{$audioBook->id}", []);
+
+        return response()->json(array_merge(['success' => true], $progress));
+    }
+
+    private function initTtsBatchProgress(int $audioBookId, string $status, string $message): void
+    {
+        Cache::put("tts_batch_progress_{$audioBookId}", [
+            'status' => $status,
+            'percent' => 1,
+            'message' => $message,
+            'current_chapter_number' => null,
+            'current_chunk_number' => null,
+            'current_chunk_total' => null,
+            'chunk_percent' => null,
+            'logs' => [],
+            'updated_at' => now()->toIso8601String(),
+        ], now()->addHours(6));
+
+        Cache::put("tts_batch_logs_{$audioBookId}", [], now()->addHours(6));
     }
 
     /**

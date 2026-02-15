@@ -48,7 +48,9 @@ class AudioBook extends Model
         'youtube_playlist_title',
         'youtube_video_title',
         'youtube_video_description',
-        'youtube_video_tags'
+        'youtube_video_tags',
+        'full_book_video',
+        'full_book_video_duration'
     ];
 
     protected $casts = [
@@ -73,5 +75,10 @@ class AudioBook extends Model
     public function chapters()
     {
         return $this->hasMany(AudioBookChapter::class)->orderBy('chapter_number');
+    }
+
+    public function videoSegments()
+    {
+        return $this->hasMany(AudioBookVideoSegment::class)->orderBy('sort_order');
     }
 }

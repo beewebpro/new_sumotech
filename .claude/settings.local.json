@@ -16,7 +16,13 @@
       "Bash(crontab:*)",
       "Bash(printf:*)",
       "Bash(1 CRON crontab -l)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(truncate:*)",
+      "Bash(supervisorctl status:*)",
+      "Bash(kill:*)",
+      "Bash(systemctl daemon-reload:*)",
+      "Bash(systemctl enable:*)",
+      "Bash(systemctl start:*)"
     ]
   }
 }

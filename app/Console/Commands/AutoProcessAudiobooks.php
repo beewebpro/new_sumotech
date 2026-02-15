@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\AudioBook;
 use App\Models\AutomationLog;
 use App\Services\AudiobookAutoProcessor;
 use Illuminate\Console\Command;
@@ -63,6 +64,8 @@ class AutoProcessAudiobooks extends Command
                 $metaData['tts_found'] = $ttsResult['found'];
                 $metaData['tts_processed'] = count($ttsResult['processed']);
                 $metaData['tts_completed'] = count($ttsResult['completed']);
+                $metaData['tts_processed_titles'] = $this->mapBookTitles($ttsResult['processed']);
+                $metaData['tts_completed_titles'] = $this->mapBookTitles($ttsResult['completed']);
                 $this->newLine();
             }
 
@@ -83,6 +86,8 @@ class AutoProcessAudiobooks extends Command
                 $metaData['video_found'] = $videoResult['found'];
                 $metaData['video_processed'] = count($videoResult['processed']);
                 $metaData['video_completed'] = count($videoResult['completed']);
+                $metaData['video_processed_titles'] = $this->mapBookTitles($videoResult['processed']);
+                $metaData['video_completed_titles'] = $this->mapBookTitles($videoResult['completed']);
                 $this->newLine();
             }
 
@@ -138,5 +143,20 @@ class AutoProcessAudiobooks extends Command
         }
 
         return Command::SUCCESS;
+    }
+
+    private function mapBookTitles(array $bookIds): array
+    {
+        $ids = array_values(array_unique(array_filter($bookIds)));
+        if (empty($ids)) {
+            return [];
+        }
+
+        $titles = AudioBook::whereIn('id', $ids)->pluck('title', 'id');
+
+        return array_values(array_map(function ($id) use ($titles) {
+            $title = $titles[$id] ?? null;
+            return $title ? "[{$id}] {$title}" : (string) $id;
+        }, $ids));
     }
 }
